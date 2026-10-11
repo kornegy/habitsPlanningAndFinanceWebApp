@@ -33,37 +33,39 @@ jobs:
         run: dotnet format PersonalPlatform.slnx --verify-no-changes --no-restore
       - name: Build (warnings are errors, analyzers on)
         run: dotnet build PersonalPlatform.slnx -c Release --no-restore
-      - name: Unit and architecture tests
+      - name: Unit tests
         run: >
           dotnet test -c Release --no-build
           --project tests/PersonalPlatform.UnitTests
-          --coverage --coverage-output-format cobertura --coverage-output unit.cobertura.xml --report-trx
+          --results-directory TestResults --coverage --coverage-output-format cobertura --coverage-output unit.cobertura.xml --report-trx
       - name: Architecture tests
-        run: dotnet test -c Release --no-build --project tests/PersonalPlatform.ArchitectureTests --report-trx
+        run: dotnet test -c Release --no-build --project tests/PersonalPlatform.ArchitectureTests --results-directory TestResults --report-trx
       - name: Integration tests (PostgreSQL via Testcontainers)
         run: >
           dotnet test -c Release --no-build
           --project tests/PersonalPlatform.IntegrationTests
-          --coverage --coverage-output-format cobertura --coverage-output integration.cobertura.xml --report-trx
+          --results-directory TestResults --coverage --coverage-output-format cobertura --coverage-output integration.cobertura.xml --report-trx
       - name: Security tests
         run: >
           dotnet test -c Release --no-build
           --project tests/PersonalPlatform.SecurityTests
-          --coverage --coverage-output-format cobertura --coverage-output security.cobertura.xml --report-trx
+          --results-directory TestResults --coverage --coverage-output-format cobertura --coverage-output security.cobertura.xml --report-trx
       - name: Check migrations are up to date with the model
-        run: dotnet ef migrations has-pending-model-changes --project src/PersonalPlatform.Infrastructure --startup-project src/PersonalPlatform.Infrastructure --no-build -c Release
+        run: dotnet ef migrations has-pending-model-changes --project src/PersonalPlatform.Infrastructure --startup-project src/PersonalPlatform.Infrastructure --no-build --configuration Release
       - name: Coverage report
         if: always()
         run: |
           dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.5.11
-          reportgenerator -reports:"tests/**/TestResults/**/*.cobertura.xml" -targetdir:coverage -reporttypes:"MarkdownSummaryGithub;Cobertura" -assemblyfilters:"+PersonalPlatform.*;-PersonalPlatform.TestInfrastructure"
+          reportgenerator -reports:"TestResults/*.cobertura.xml" -targetdir:coverage -reporttypes:"MarkdownSummaryGithub;Cobertura" -assemblyfilters:"+PersonalPlatform.*;-PersonalPlatform.TestInfrastructure"
           cat coverage/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Coverage gate (Domain, Application, Infrastructure >= 90% lines)
+        run: python3 deploy/ci/check-coverage.py coverage/Cobertura.xml 0.90
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results
           path: |
-            tests/**/TestResults/**
+            TestResults/**
             coverage/**
           retention-days: 14
 
