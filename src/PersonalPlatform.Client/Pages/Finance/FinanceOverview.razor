@@ -1,0 +1,175 @@
+@page "/finance"
+@using PersonalPlatform.Contracts.Finance
+@using PersonalPlatform.Contracts.Notes
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<PageTitle>@L["Финансы", "Finance"]</PageTitle>
+<div class="page-header">
+    <h1>@L["Финансы", "Finance"]</h1>
+    <div class="row">
+        <a class="button" href="finance/transactions?new=income">@L["Доход", "Income"]</a>
+        <a class="button" href="finance/transactions?new=transfer">@L["Перевод", "Transfer"]</a>
+        <a class="button button-primary" href="finance/transactions?new=expense"><Icon Name="plus" />@L["Расход", "Expense"]</a>
+    </div>
+</div>
+<FinanceTabs />
+
+@if (_overview is null)
+{
+    <Skeleton Lines="6" />
+}
+else
+{
+    <section class="section">
+        <div class="section-title"><h2>@L["Итого по валютам", "Totals by currency"]</h2></div>
+        @if (_overview.TotalsByCurrency.Count == 0)
+        {
+            <p class="muted">@L["Добавьте первый счёт.", "Add your first account."]</p>
+        }
+        <div class="kpis">
+            @foreach (var total in _overview.TotalsByCurrency)
+            {
+                <div class="stat"><span class="stat-value @(total.Amount < 0 ? "negative" : null)">@L.Money(total.Amount, total.CurrencyCode)</span><span class="stat-label">@total.CurrencyCode</span></div>
+            }
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="section-title">
+            <h2>@L["Счета", "Accounts"]</h2>
+            <div class="row">
+                <label class="checkbox small"><input type="checkbox" @bind="_archived" @bind:after="LoadAsync" /> @L["Архив", "Archived"]</label>
+                <button type="button" class="button button-small" @onclick="() => EditAccount(null)"><Icon Name="plus" Size="14" />@L["Счёт", "Account"]</button>
+            </div>
+        </div>
+        @if (_overview.Accounts.Count == 0)
+        {
+            <EmptyState IconName="wallet" Title="@L["Счетов пока нет", "No accounts yet"]" Text="@L["Создайте счёт: карту, наличные или сбережения.", "Create an account: a card, cash or savings."]" />
+        }
+        else
+        {
+            <table class="table">
+                <thead><tr><th>@L["Счёт", "Account"]</th><th class="hide-narrow">@L["Тип", "Type"]</th><th class="right">@L["Баланс", "Balance"]</th><th><span class="visually-hidden">@L["Действия", "Actions"]</span></th></tr></thead>
+                <tbody>
+                    @foreach (var account in _overview.Accounts)
+                    {
+                        <tr @key="account.Id">
+                            <td><a href="finance/transactions?accountId=@account.Id">@account.Name</a> @if (account.IsArchived) { <span class="tag">@L["архив", "archived"]</span> }</td>
+                            <td class="hide-narrow muted">@TypeName(account.Type)</td>
+                            <td class="right num @(account.Balance < 0 ? "negative" : null)">@L.Money(account.Balance, account.CurrencyCode)</td>
+                            <td class="right nowrap">
+                                <button type="button" class="icon-button" @onclick="() => EditAccount(account)" aria-label="@L["Изменить", "Edit"]"><Icon Name="edit" /></button>
+                                <button type="button" class="icon-button" @onclick="() => ArchiveAsync(account)" aria-label="@(account.IsArchived ? L["Вернуть из архива", "Restore"] : L["В архив", "Archive"])"><Icon Name="archive" /></button>
+                                <button type="button" class="icon-button" @onclick="() => _deleting = account" aria-label="@L["Удалить", "Delete"]"><Icon Name="trash" /></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    @if (_year is not null)
+    {
+        <section class="section">
+            <div class="section-title"><h2>@L[$"Доходы и расходы, {_year.Year}", $"Income and expenses, {_year.Year}"]</h2></div>
+            @foreach (var currency in _year.Currencies)
+            {
+                <h3>@currency.CurrencyCode · @L["чистый поток", "net"] <span class="num @(currency.Net < 0 ? "negative" : null)">@L.Money(currency.Net, currency.CurrencyCode)</span></h3>
+                <BarChart Title="@($"{currency.CurrencyCode} {_year.Year}")" Points="@currency.Months.Select(m => new BarChart.ChartPoint(L.MonthShort(m.Month), m.Income, m.Expense)).ToList()" />
+            }
+            @if (_year.Currencies.Count == 0)
+            {
+                <p class="muted">@L["За этот год операций нет.", "No operations this year."]</p>
+            }
+        </section>
+    }
+}
+
+<AccountEditor @bind-Open="_editorOpen" Account="_editing" OnSaved="LoadAsync" />
+<ConfirmDialog Open="_deleting is not null" OpenChanged="v => { if (!v) _deleting = null; }" Title="@L["Удалить счёт?", "Delete account?"]"
+               Message="@L["Удалить можно только счёт без операций. Счёт с историей лучше отправить в архив.", "Only an account without operations can be deleted. Archive accounts with history instead."]" OnConfirm="DeleteAsync" />
+
+@code {
+    private AccountsOverviewDto? _overview;
+    private YearSummaryDto? _year;
+    private bool _archived;
+    private bool _editorOpen;
+    private AccountDto? _editing;
+    private AccountDto? _deleting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await Api.PostAsync<PostDueResult>("/api/v1/finance/recurring/post-due", null);
+        }
+        catch (ApiException)
+        {
+            // Posting due recurring operations is retried on the next visit.
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _overview = await Api.GetAsync<AccountsOverviewDto>($"/api/v1/finance/accounts?includeArchived={(_archived ? "true" : "false")}");
+            _year = await Api.GetAsync<YearSummaryDto>($"/api/v1/finance/reports/year?year={L.Today.Year}");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+    }
+
+    private string TypeName(AccountType type) => type switch
+    {
+        AccountType.Cash => L["Наличные", "Cash"],
+        AccountType.Savings => L["Сбережения", "Savings"],
+        AccountType.CreditCard => L["Кредитная карта", "Credit card"],
+        AccountType.Investment => L["Инвестиции", "Investments"],
+        AccountType.Other => L["Другое", "Other"],
+        _ => L["Карта / текущий", "Card / checking"],
+    };
+
+    private void EditAccount(AccountDto? account)
+    {
+        _editing = account;
+        _editorOpen = true;
+    }
+
+    private async Task ArchiveAsync(AccountDto account)
+    {
+        try
+        {
+            await Api.PostAsync<AccountDto>($"/api/v1/finance/accounts/{account.Id}/archive", new SetArchivedRequest(!account.IsArchived));
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        var account = _deleting!;
+        _deleting = null;
+        try
+        {
+            await Api.DeleteAsync($"/api/v1/finance/accounts/{account.Id}");
+            Toasts.Success(L["Счёт удалён", "Account deleted"]);
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Code == "account_in_use" ? L["По счёту есть операции. Отправьте его в архив.", "The account has operations. Archive it instead."] : ex.Message);
+        }
+
+        await LoadAsync();
+    }
+}

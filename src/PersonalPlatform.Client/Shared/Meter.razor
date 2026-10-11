@@ -1,0 +1,13 @@
+@* Progress meter drawn in SVG (width via attribute, not inline style). Value is announced to assistive tech. *@
+<svg class="meter" viewBox="0 0 100 8" preserveAspectRatio="none" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Clamped" aria-label="@Label">
+    <rect class="track" x="0" y="0" width="100" height="8" rx="4" />
+    <rect class="fill @State" x="0" y="0" width="@Clamped.ToString(System.Globalization.CultureInfo.InvariantCulture)" height="8" rx="4" />
+</svg>
+
+@code {
+    [Parameter] public decimal Percent { get; set; }
+    [Parameter] public string? State { get; set; }
+    [Parameter] public string? Label { get; set; }
+
+    private decimal Clamped => Math.Clamp(decimal.Round(Percent, 1), 0, 100);
+}

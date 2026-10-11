@@ -1,0 +1,14 @@
+@if (TotalPages > 1)
+{
+    <nav class="pager" aria-label="@L["Страницы", "Pages"]">
+        <button type="button" class="icon-button" disabled="@(Page <= 1)" @onclick="() => PageChanged.InvokeAsync(Page - 1)" aria-label="@L["Назад", "Previous"]"><Icon Name="chevron-left" /></button>
+        <span class="muted">@Page / @TotalPages</span>
+        <button type="button" class="icon-button" disabled="@(Page >= TotalPages)" @onclick="() => PageChanged.InvokeAsync(Page + 1)" aria-label="@L["Вперёд", "Next"]"><Icon Name="chevron-right" /></button>
+    </nav>
+}
+
+@code {
+    [Parameter] public int Page { get; set; }
+    [Parameter] public int TotalPages { get; set; }
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+}

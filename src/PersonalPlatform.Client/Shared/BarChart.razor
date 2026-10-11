@@ -1,0 +1,47 @@
+@* Paired monthly bars (income vs expense) in SVG. Data comes from the server; nothing is computed here
+   except geometry. A visually hidden table provides the same data to screen readers. *@
+@using System.Globalization
+<figure class="chart-figure">
+    <svg class="chart" viewBox="0 0 @Width @Height" role="img" aria-label="@Title">
+        <line class="axis" x1="0" y1="@Base" x2="@Width" y2="@Base" />
+        @for (var i = 0; i < Points.Count; i++)
+        {
+            var point = Points[i];
+            var x = (i * Slot) + 6;
+            <rect class="bar-income" x="@F(x)" y="@F(Base - Scale(point.Income))" width="@F(BarWidth)" height="@F(Scale(point.Income))" rx="2" />
+            <rect class="bar-expense" x="@F(x + BarWidth + 2)" y="@F(Base - Scale(point.Expense))" width="@F(BarWidth)" height="@F(Scale(point.Expense))" rx="2" />
+            <SvgText X="@F(x + BarWidth)" Y="@F(Height - 4)" Anchor="middle" Text="@point.Label" />
+        }
+    </svg>
+    <figcaption class="legend">
+        <span><span class="legend-swatch legend-income"></span>@L["Доходы", "Income"]</span>
+        <span><span class="legend-swatch legend-expense"></span>@L["Расходы", "Expenses"]</span>
+    </figcaption>
+    <table class="visually-hidden">
+        <caption>@Title</caption>
+        <tr><th>@L["Период", "Period"]</th><th>@L["Доходы", "Income"]</th><th>@L["Расходы", "Expenses"]</th></tr>
+        @foreach (var p in Points)
+        {
+            <tr><td>@p.Label</td><td>@p.Income</td><td>@p.Expense</td></tr>
+        }
+    </table>
+</figure>
+
+@code {
+    private const double Width = 600;
+    private const double Height = 180;
+    private const double Base = 160;
+
+    [Parameter, EditorRequired] public IReadOnlyList<ChartPoint> Points { get; set; } = [];
+    [Parameter] public string Title { get; set; } = string.Empty;
+
+    private double Slot => Width / Math.Max(Points.Count, 1);
+    private double BarWidth => Math.Max((Slot - 14) / 2, 2);
+    private double Max => (double)Math.Max(Points.Select(p => Math.Max(p.Income, p.Expense)).DefaultIfEmpty(0).Max(), 1m);
+
+    private double Scale(decimal value) => (double)value / Max * (Base - 10);
+
+    private static string F(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    public sealed record ChartPoint(string Label, decimal Income, decimal Expense);
+}

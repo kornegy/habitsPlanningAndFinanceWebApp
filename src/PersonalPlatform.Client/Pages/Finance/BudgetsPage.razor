@@ -1,0 +1,199 @@
+@page "/finance/budgets"
+@using PersonalPlatform.Contracts.Finance
+@inject ApiClient Api
+@inject ToastService Toasts
+@inject UserContext User
+
+<PageTitle>@L["Бюджеты", "Budgets"]</PageTitle>
+<div class="page-header">
+    <h1>@L["Бюджеты", "Budgets"]</h1>
+    <div class="row">
+        <button type="button" class="icon-button" @onclick="() => ShiftAsync(-1)" aria-label="@L["Предыдущий месяц", "Previous month"]"><Icon Name="chevron-left" /></button>
+        <span class="nowrap">@L.MonthYear(_month.Year, _month.Month)</span>
+        <button type="button" class="icon-button" @onclick="() => ShiftAsync(1)" aria-label="@L["Следующий месяц", "Next month"]"><Icon Name="chevron-right" /></button>
+        <button type="button" class="button button-primary" @onclick="() => Open(null)"><Icon Name="plus" />@L["Бюджет", "Budget"]</button>
+    </div>
+</div>
+<FinanceTabs />
+
+@if (_report is null)
+{
+    <Skeleton Lines="5" />
+}
+else if (_report.Items.Count == 0)
+{
+    <EmptyState IconName="chart" Title="@L["Бюджетов нет", "No budgets"]" Text="@L["Задайте месячный лимит расходов для категории или для всех расходов.", "Set a monthly spending limit for a category or for all expenses."]" />
+}
+else
+{
+    <ul class="list">
+        @foreach (var item in _report.Items)
+        {
+            var budget = _budgets.FirstOrDefault(b => b.Id == item.BudgetId);
+            <li class="list-item" @key="item.BudgetId">
+                <div class="list-main stack">
+                    <div class="row-between">
+                        <strong>@(item.CategoryName ?? L["Все расходы", "All expenses"])</strong>
+                        <span class="num small">@L.Money(item.Spent, item.CurrencyCode) / @L.Money(item.Limit, item.CurrencyCode)</span>
+                    </div>
+                    <Meter Percent="item.UsedPercent" State="@StateClass(item.State)" Label="@L.Percent(item.UsedPercent)" />
+                    <div class="list-meta">
+                        <span class="@(item.State == BudgetState.Exceeded ? "negative" : null)">@StateText(item)</span>
+                        <span>@L.Percent(item.UsedPercent)</span>
+                    </div>
+                </div>
+                @if (budget is not null)
+                {
+                    <button type="button" class="icon-button" @onclick="() => Open(budget)" aria-label="@L["Изменить", "Edit"]"><Icon Name="edit" /></button>
+                    <button type="button" class="icon-button" @onclick="() => _deleting = budget" aria-label="@L["Удалить", "Delete"]"><Icon Name="trash" /></button>
+                }
+            </li>
+        }
+    </ul>
+}
+
+<Modal @bind-Open="_editorOpen" Title="@(_editing is null ? L["Новый бюджет", "New budget"] : L["Бюджет", "Budget"])">
+    <ChildContent>
+        <form id="budget-form" class="stack" @onsubmit="SaveAsync">
+            @if (_editing is null)
+            {
+                <label class="field">
+                    <span>@L["Категория расходов", "Expense category"]</span>
+                    <select @bind="_categoryId">
+                        <option value="">@L["Все расходы", "All expenses"]</option>
+                        @foreach (var c in _categories.Where(c => c.Kind == CategoryKind.Expense && c.ParentId is null && !c.IsArchived))
+                        {
+                            <option value="@c.Id">@c.Name</option>
+                        }
+                    </select>
+                </label>
+                <label class="field">
+                    <span>@L["Валюта", "Currency"]</span>
+                    <select @bind="_currency">
+                        @foreach (var c in User.Reference?.Currencies ?? [])
+                        {
+                            <option value="@c.Code">@c.Code</option>
+                        }
+                    </select>
+                </label>
+            }
+            <div class="grid-2">
+                <label class="field"><span>@L["Лимит в месяц", "Monthly limit"]</span><input type="number" min="0" step="any" @bind="_limit" required /></label>
+                <label class="field"><span>@L["Предупреждать при, %", "Warn at, %"]</span><input type="number" min="1" max="100" @bind="_threshold" required /></label>
+            </div>
+            <ErrorText Error="_error" />
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="button" @onclick="() => _editorOpen = false">@L["Отмена", "Cancel"]</button>
+        <button type="submit" form="budget-form" class="button button-primary">@L["Сохранить", "Save"]</button>
+    </Footer>
+</Modal>
+<ConfirmDialog Open="_deleting is not null" OpenChanged="v => { if (!v) _deleting = null; }" Title="@L["Удалить бюджет?", "Delete budget?"]"
+               Message="@L["Операции не затрагиваются.", "Transactions are not affected."]" OnConfirm="DeleteAsync" />
+
+@code {
+    private BudgetReportDto? _report;
+    private IReadOnlyList<BudgetDto> _budgets = [];
+    private IReadOnlyList<FinanceCategoryDto> _categories = [];
+    private DateOnly _month;
+    private bool _editorOpen;
+    private BudgetDto? _editing;
+    private BudgetDto? _deleting;
+    private string _categoryId = string.Empty;
+    private string _currency = "RUB";
+    private decimal _limit;
+    private int _threshold = 80;
+    private ApiException? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _month = new DateOnly(L.Today.Year, L.Today.Month, 1);
+        _categories = await Api.GetAsync<List<FinanceCategoryDto>>("/api/v1/finance/categories");
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _budgets = await Api.GetAsync<List<BudgetDto>>("/api/v1/finance/budgets");
+            _report = await Api.GetAsync<BudgetReportDto>($"/api/v1/finance/budgets/report?year={_month.Year}&month={_month.Month}");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+    }
+
+    private async Task ShiftAsync(int months)
+    {
+        _month = _month.AddMonths(months);
+        await LoadAsync();
+    }
+
+    private void Open(BudgetDto? budget)
+    {
+        _editing = budget;
+        _error = null;
+        _categoryId = string.Empty;
+        _currency = User.Currency;
+        _limit = budget?.MonthlyLimit ?? 0m;
+        _threshold = budget?.WarningThresholdPercent ?? 80;
+        _editorOpen = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        try
+        {
+            if (_editing is null)
+            {
+                Guid? category = Guid.TryParse(_categoryId, out var c) ? c : null;
+                await Api.PostAsync<BudgetDto>("/api/v1/finance/budgets", new CreateBudgetRequest(category, _currency, _limit, _threshold));
+            }
+            else
+            {
+                await Api.PutAsync<BudgetDto>($"/api/v1/finance/budgets/{_editing.Id}", new UpdateBudgetRequest(_limit, _threshold, _editing.Version));
+            }
+
+            _editorOpen = false;
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Code == "duplicate" ? new ApiException(ex.Status, ex.Code, L["Бюджет для этой категории и валюты уже есть.", "A budget for this category and currency already exists."]) : ex;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        var budget = _deleting!;
+        _deleting = null;
+        try
+        {
+            await Api.DeleteAsync($"/api/v1/finance/budgets/{budget.Id}");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+
+    private static string? StateClass(BudgetState state) => state switch
+    {
+        BudgetState.Exceeded => "exceeded",
+        BudgetState.Warning => "warning",
+        _ => null,
+    };
+
+    private string StateText(BudgetUsageDto item) => item.State switch
+    {
+        BudgetState.Exceeded => L[$"Превышен на {L.Money(-item.Remaining, item.CurrencyCode)}", $"Over by {L.Money(-item.Remaining, item.CurrencyCode)}"],
+        BudgetState.Warning => L[$"Осталось {L.Money(item.Remaining, item.CurrencyCode)} — близко к лимиту", $"{L.Money(item.Remaining, item.CurrencyCode)} left — near the limit"],
+        _ => L[$"Осталось {L.Money(item.Remaining, item.CurrencyCode)}", $"{L.Money(item.Remaining, item.CurrencyCode)} left"],
+    };
+}

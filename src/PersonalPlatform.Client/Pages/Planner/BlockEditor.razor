@@ -1,0 +1,126 @@
+@using PersonalPlatform.Contracts.Planner
+@inject ApiClient Api
+
+<Modal Open="Open" OpenChanged="OpenChanged" Title="@(Block is null ? L["Новый блок", "New block"] : L["Блок времени", "Time block"])">
+    <ChildContent>
+        <form id="block-form" class="stack" @onsubmit="SaveAsync">
+            <label class="field"><span>@L["Название", "Title"]</span><input @bind="_title" required maxlength="200" /></label>
+            <div class="grid-3">
+                <label class="field"><span>@L["Дата", "Date"]</span><input type="date" @bind="_date" required /></label>
+                <label class="field"><span>@L["Начало", "Start"]</span><input type="time" step="300" @bind="_start" required /></label>
+                <label class="field"><span>@L["Окончание", "End"]</span><input type="time" step="300" @bind="_end" required /></label>
+            </div>
+            <label class="field"><span>@L["Заметки", "Notes"]</span><textarea @bind="_notes" rows="2" maxlength="2000"></textarea></label>
+            @if (Block is null && TaskId is null)
+            {
+                <label class="checkbox"><input type="checkbox" @bind="_createTask" /> @L["Создать задачу с таким же названием", "Also create a task with this title"]</label>
+            }
+            @if (Block?.TaskTitle is { } taskTitle)
+            {
+                <p class="muted small"><Icon Name="tasks" Size="14" /> @taskTitle</p>
+            }
+            <ErrorText Error="_error" />
+        </form>
+    </ChildContent>
+    <Footer>
+        @if (Block is not null)
+        {
+            <button type="button" class="button button-danger" @onclick="DeleteAsync">@L["Удалить", "Delete"]</button>
+        }
+        <button type="button" class="button" @onclick="() => OpenChanged.InvokeAsync(false)">@L["Отмена", "Cancel"]</button>
+        <button type="submit" form="block-form" class="button button-primary" disabled="@_busy">@L["Сохранить", "Save"]</button>
+    </Footer>
+</Modal>
+
+@code {
+    private string _title = string.Empty;
+    private string? _notes;
+    private DateOnly _date;
+    private TimeOnly _start;
+    private TimeOnly _end;
+    private bool _createTask;
+    private ApiException? _error;
+    private bool _busy;
+    private bool _wasOpen;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public TimeBlockDto? Block { get; set; }
+    [Parameter] public DateOnly Date { get; set; }
+    [Parameter] public TimeOnly Start { get; set; }
+    [Parameter] public Guid? TaskId { get; set; }
+    [Parameter] public string? DefaultTitle { get; set; }
+    [Parameter] public EventCallback<TimeBlockSaveResult?> OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _error = null;
+            _createTask = false;
+            if (Block is null)
+            {
+                _title = DefaultTitle ?? string.Empty;
+                _notes = null;
+                _date = Date;
+                _start = Start;
+                _end = Start.AddHours(1) < Start ? new TimeOnly(23, 55) : Start.AddHours(1);
+            }
+            else
+            {
+                var start = L.ToLocal(Block.StartsAt);
+                var end = L.ToLocal(Block.EndsAt);
+                _title = Block.Title;
+                _notes = Block.Notes;
+                _date = DateOnly.FromDateTime(start.DateTime);
+                _start = TimeOnly.FromDateTime(start.DateTime);
+                _end = TimeOnly.FromDateTime(end.DateTime);
+            }
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var startsAt = L.ToInstant(_date, _start);
+            // An end time earlier than the start means the block ends after midnight.
+            var endsAt = L.ToInstant(_end <= _start ? _date.AddDays(1) : _date, _end);
+            TimeBlockSaveResult result = Block is null
+                ? await Api.PostAsync<TimeBlockSaveResult>("/api/v1/planner/blocks",
+                    new CreateTimeBlockRequest(_title, _notes, startsAt, endsAt, TaskId, _createTask ? _title : null))
+                : await Api.PutAsync<TimeBlockSaveResult>($"/api/v1/planner/blocks/{Block.Id}",
+                    new UpdateTimeBlockRequest(_title, _notes, startsAt, endsAt, Block.TaskId, Block.Version));
+            await OnSaved.InvokeAsync(result);
+            await OpenChanged.InvokeAsync(false);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Code == "time_block_overlap"
+                ? new ApiException(ex.Status, ex.Code, L["Время пересекается с другим блоком, а пересечения отключены в настройках.", "This time overlaps another block and overlaps are disabled in settings."])
+                : ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        try
+        {
+            await Api.DeleteAsync($"/api/v1/planner/blocks/{Block!.Id}");
+            await OnSaved.InvokeAsync(null);
+            await OpenChanged.InvokeAsync(false);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex;
+        }
+    }
+}

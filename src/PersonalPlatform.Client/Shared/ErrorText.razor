@@ -1,0 +1,23 @@
+@* Renders an API error: field errors when present, otherwise the server's safe message. *@
+@if (Error is not null)
+{
+    <div class="form-error" role="alert">
+        @if (Error.Errors.Count > 0)
+        {
+            <ul>
+                @foreach (var message in Error.Errors.SelectMany(e => e.Value).Distinct())
+                {
+                    <li>@message</li>
+                }
+            </ul>
+        }
+        else
+        {
+            <span>@Error.Message</span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public ApiException? Error { get; set; }
+}

@@ -1,0 +1,135 @@
+@using PersonalPlatform.Contracts.Habits
+@using PersonalPlatform.Contracts.Organization
+@using PersonalPlatform.Contracts.Tasks
+@inject ApiClient Api
+
+<Modal Open="Open" OpenChanged="OpenChanged" Title="@(Habit is null ? L["Новая привычка", "New habit"] : L["Привычка", "Habit"])">
+    <ChildContent>
+        <form id="habit-form" class="stack" @onsubmit="SaveAsync">
+            <label class="field"><span>@L["Название", "Name"]</span><input @bind="_name" required maxlength="100" /></label>
+            <label class="field"><span>@L["Описание", "Description"]</span><textarea @bind="_description" maxlength="1000" rows="2"></textarea></label>
+            <div class="grid-2">
+                <label class="field">
+                    <span>@L["Расписание", "Schedule"]</span>
+                    <select @bind="_type">
+                        <option value="@HabitScheduleType.Daily">@L["Каждый день", "Every day"]</option>
+                        <option value="@HabitScheduleType.SpecificWeekdays">@L["По дням недели", "On weekdays"]</option>
+                        <option value="@HabitScheduleType.EveryNDays">@L["Раз в N дней", "Every N days"]</option>
+                    </select>
+                </label>
+                <label class="field"><span>@L["Начало", "Start date"]</span><input type="date" @bind="_startDate" required /></label>
+            </div>
+            @if (_type == HabitScheduleType.SpecificWeekdays)
+            {
+                <div class="weekday-picker" role="group" aria-label="@L["Дни недели", "Weekdays"]">
+                    @foreach (var (flag, ru, en) in Days)
+                    {
+                        <label><input type="checkbox" checked="@_days.HasFlag(flag)" @onchange="() => _days ^= flag" /> @L[ru, en]</label>
+                    }
+                </div>
+            }
+            @if (_type == HabitScheduleType.EveryNDays)
+            {
+                <label class="field"><span>@L["Интервал, дней", "Interval, days"]</span><input type="number" min="2" max="365" @bind="_interval" /></label>
+            }
+            <div class="grid-3">
+                <label class="field"><span>@L["Цвет", "Colour"]</span><input type="color" @bind="_color" /></label>
+                <label class="field"><span>@L["Цель: серия, дней", "Goal: streak"]</span><input type="number" min="1" max="3650" @bind="_target" /></label>
+                <label class="field"><span>@L["Напоминание", "Reminder"]</span><input type="time" @bind="_reminder" /></label>
+            </div>
+            <label class="field">
+                <span>@L["Категория", "Category"]</span>
+                <select @bind="_categoryId">
+                    <option value="">@L["Без категории", "None"]</option>
+                    @foreach (var c in Categories)
+                    {
+                        <option value="@c.Id">@c.Name</option>
+                    }
+                </select>
+            </label>
+            <ErrorText Error="_error" />
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="button" @onclick="() => OpenChanged.InvokeAsync(false)">@L["Отмена", "Cancel"]</button>
+        <button type="submit" form="habit-form" class="button button-primary" disabled="@_busy">@L["Сохранить", "Save"]</button>
+    </Footer>
+</Modal>
+
+@code {
+    private static readonly (Weekdays Flag, string Ru, string En)[] Days =
+    [
+        (Weekdays.Monday, "Пн", "Mon"), (Weekdays.Tuesday, "Вт", "Tue"), (Weekdays.Wednesday, "Ср", "Wed"), (Weekdays.Thursday, "Чт", "Thu"),
+        (Weekdays.Friday, "Пт", "Fri"), (Weekdays.Saturday, "Сб", "Sat"), (Weekdays.Sunday, "Вс", "Sun"),
+    ];
+
+    private string _name = string.Empty;
+    private string? _description;
+    private HabitScheduleType _type;
+    private Weekdays _days;
+    private int _interval = 2;
+    private DateOnly _startDate;
+    private string _color = "#20211F";
+    private int? _target;
+    private TimeOnly? _reminder;
+    private string _categoryId = string.Empty;
+    private ApiException? _error;
+    private bool _busy;
+    private bool _wasOpen;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public HabitDto? Habit { get; set; }
+    [Parameter] public IReadOnlyList<CategoryDto> Categories { get; set; } = [];
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _error = null;
+            _name = Habit?.Name ?? string.Empty;
+            _description = Habit?.Description;
+            _type = Habit?.ScheduleType ?? HabitScheduleType.Daily;
+            _days = Habit?.Days ?? Weekdays.None;
+            _interval = Math.Max(Habit?.IntervalDays ?? 2, 2);
+            _startDate = Habit?.StartDate ?? L.Today;
+            _color = Habit?.Color ?? "#20211F";
+            _target = Habit?.TargetStreak;
+            _reminder = Habit?.ReminderTime;
+            _categoryId = Habit?.CategoryId?.ToString() ?? string.Empty;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            Guid? category = Guid.TryParse(_categoryId, out var c) ? c : null;
+            var interval = _type == HabitScheduleType.EveryNDays ? _interval : 1;
+            if (Habit is null)
+            {
+                await Api.PostAsync<HabitDto>("/api/v1/habits", new CreateHabitRequest(_name, _description, _color.ToUpperInvariant(), category, _type, _days, interval, _startDate, _target, _reminder));
+            }
+            else
+            {
+                await Api.PutAsync<HabitDto>($"/api/v1/habits/{Habit.Id}", new UpdateHabitRequest(_name, _description, _color.ToUpperInvariant(), category, _type, _days, interval, _startDate, _target, _reminder, Habit.Version));
+            }
+
+            await OnSaved.InvokeAsync();
+            await OpenChanged.InvokeAsync(false);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

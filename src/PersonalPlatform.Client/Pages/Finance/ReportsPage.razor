@@ -1,0 +1,111 @@
+@page "/finance/reports"
+@using PersonalPlatform.Contracts.Finance
+@inject ApiClient Api
+@inject ToastService Toasts
+@inject UserContext User
+
+<PageTitle>@L["Отчёты", "Reports"]</PageTitle>
+<div class="page-header"><h1>@L["Отчёты", "Reports"]</h1></div>
+<FinanceTabs />
+
+<div class="toolbar">
+    <label class="field"><span>@L["С", "From"]</span><input type="date" @bind="_from" @bind:after="LoadAsync" /></label>
+    <label class="field"><span>@L["По", "To"]</span><input type="date" @bind="_to" @bind:after="LoadAsync" /></label>
+    <label class="field">
+        <span>@L["Валюта", "Currency"]</span>
+        <select @bind="_currency" @bind:after="LoadAsync">
+            @foreach (var c in User.Reference?.Currencies ?? [])
+            {
+                <option value="@c.Code">@c.Code</option>
+            }
+        </select>
+    </label>
+    <label class="field">
+        <span>@L["Тип", "Kind"]</span>
+        <select @bind="_kind" @bind:after="LoadAsync">
+            <option value="@CategoryKind.Expense">@L["Расходы", "Expenses"]</option>
+            <option value="@CategoryKind.Income">@L["Доходы", "Income"]</option>
+        </select>
+    </label>
+</div>
+<ErrorText Error="_error" />
+
+@if (_period is not null)
+{
+    <section class="section">
+        <h2>@L["Денежный поток за период", "Cash flow for the period"]</h2>
+        @if (_period.Currencies.Count == 0)
+        {
+            <p class="muted">@L["Операций за период нет.", "No operations in this period."]</p>
+        }
+        <table class="table">
+            <thead><tr><th>@L["Валюта", "Currency"]</th><th class="right">@L["Доходы", "Income"]</th><th class="right">@L["Расходы", "Expenses"]</th><th class="right">@L["Итог", "Net"]</th></tr></thead>
+            <tbody>
+                @foreach (var flow in _period.Currencies)
+                {
+                    <tr>
+                        <td>@flow.CurrencyCode</td>
+                        <td class="right num">@L.Money(flow.Income, flow.CurrencyCode)</td>
+                        <td class="right num">@L.Money(flow.Expense, flow.CurrencyCode)</td>
+                        <td class="right num @(flow.Net < 0 ? "negative" : "positive")">@L.Money(flow.Net, flow.CurrencyCode)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
+
+@if (_breakdown is not null)
+{
+    <section class="section">
+        <h2>@(_kind == CategoryKind.Expense ? L["Расходы по категориям", "Expenses by category"] : L["Доходы по категориям", "Income by category"]) · @L.Money(_breakdown.Total, _breakdown.CurrencyCode)</h2>
+        @if (_breakdown.Items.Count == 0)
+        {
+            <p class="muted">@L["Нет данных.", "No data."]</p>
+        }
+        <ul class="list">
+            @foreach (var item in _breakdown.Items)
+            {
+                <li class="list-item">
+                    <div class="list-main stack">
+                        <div class="row-between"><span>@(string.IsNullOrEmpty(item.Name) ? L["Без категории", "Uncategorised"] : item.Name)</span><span class="num">@L.Money(item.Amount, _breakdown.CurrencyCode) · @L.Percent(item.Percent)</span></div>
+                        <Meter Percent="item.Percent" Label="@item.Name" />
+                    </div>
+                </li>
+            }
+        </ul>
+    </section>
+}
+
+@code {
+    private DateOnly _from;
+    private DateOnly _to;
+    private string _currency = "RUB";
+    private CategoryKind _kind;
+    private PeriodSummaryDto? _period;
+    private CategoryBreakdownDto? _breakdown;
+    private ApiException? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _to = L.Today;
+        _from = new DateOnly(_to.Year, _to.Month, 1);
+        _currency = User.Currency;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        try
+        {
+            var range = Query.Of(("from", _from), ("to", _to));
+            _period = await Api.GetAsync<PeriodSummaryDto>("/api/v1/finance/reports/period" + range);
+            _breakdown = await Api.GetAsync<CategoryBreakdownDto>("/api/v1/finance/reports/categories" + Query.Of(("from", _from), ("to", _to), ("currencyCode", _currency), ("kind", _kind)));
+        }
+        catch (ApiException ex)
+        {
+            _error = ex;
+        }
+    }
+}

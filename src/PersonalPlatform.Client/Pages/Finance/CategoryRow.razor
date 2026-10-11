@@ -1,0 +1,45 @@
+@using PersonalPlatform.Contracts.Finance
+<li class="list-item">
+    @if (Indent)
+    {
+        <span class="muted" aria-hidden="true">└</span>
+    }
+    @if (_editing)
+    {
+        <form class="row list-main" @onsubmit="SaveAsync">
+            <input class="grow" @bind="_name" maxlength="60" required aria-label="@L["Название", "Name"]" />
+            <button type="submit" class="button button-small">@L["Сохранить", "Save"]</button>
+            <button type="button" class="link-button" @onclick="() => _editing = false">@L["Отмена", "Cancel"]</button>
+        </form>
+    }
+    else
+    {
+        <span class="list-main">@Category.Name @if (Category.IsArchived) { <span class="tag">@L["архив", "archived"]</span> }</span>
+        <button type="button" class="icon-button" @onclick="StartEdit" aria-label="@L["Переименовать", "Rename"]"><Icon Name="edit" /></button>
+        <button type="button" class="icon-button" @onclick="() => OnArchive.InvokeAsync(Category)" aria-label="@(Category.IsArchived ? L["Вернуть", "Restore"] : L["В архив", "Archive"])"><Icon Name="archive" /></button>
+        <button type="button" class="icon-button" @onclick="() => OnDelete.InvokeAsync(Category)" aria-label="@L["Удалить", "Delete"]"><Icon Name="trash" /></button>
+    }
+</li>
+
+@code {
+    private bool _editing;
+    private string _name = string.Empty;
+
+    [Parameter, EditorRequired] public FinanceCategoryDto Category { get; set; } = null!;
+    [Parameter] public bool Indent { get; set; }
+    [Parameter] public EventCallback<(FinanceCategoryDto, string)> OnRename { get; set; }
+    [Parameter] public EventCallback<FinanceCategoryDto> OnArchive { get; set; }
+    [Parameter] public EventCallback<FinanceCategoryDto> OnDelete { get; set; }
+
+    private void StartEdit()
+    {
+        _name = Category.Name;
+        _editing = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _editing = false;
+        await OnRename.InvokeAsync((Category, _name));
+    }
+}

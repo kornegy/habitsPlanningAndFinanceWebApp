@@ -1,0 +1,194 @@
+@page "/notes"
+@page "/notes/{Id:guid}"
+@implements IDisposable
+@using PersonalPlatform.Contracts.Notes
+@using PersonalPlatform.Contracts.Organization
+@inject ApiClient Api
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+
+<PageTitle>@L["Заметки", "Notes"]</PageTitle>
+<div class="page-header">
+    <h1>@L["Заметки", "Notes"]</h1>
+    <div class="row">
+        <button type="button" class="button" @onclick="ExportAsync"><Icon Name="download" />@L["Экспорт", "Export"]</button>
+        <button type="button" class="button button-primary" @onclick="CreateAsync"><Icon Name="plus" />@L["Новая заметка", "New note"]</button>
+    </div>
+</div>
+
+<div class="notes-layout">
+    <aside aria-label="@L["Список заметок", "Note list"]">
+        <div class="stack">
+            <input type="search" placeholder="@L["Поиск по тексту", "Search text"]" aria-label="@L["Поиск заметок", "Search notes"]" maxlength="100"
+                   @bind="_search" @bind:event="oninput" @bind:after="SearchChangedAsync" />
+            <div class="row">
+                <select @bind="_tagId" @bind:after="ReloadAsync" aria-label="@L["Тег", "Tag"]">
+                    <option value="">@L["Все теги", "All tags"]</option>
+                    @foreach (var tag in _tags)
+                    {
+                        <option value="@tag.Id">@tag.Name</option>
+                    }
+                </select>
+                <select @bind="_sort" @bind:after="ReloadAsync" aria-label="@L["Сортировка", "Sort"]">
+                    <option value="@NoteSort.UpdatedDesc">@L["Изменённые", "Updated"]</option>
+                    <option value="@NoteSort.CreatedDesc">@L["Созданные", "Created"]</option>
+                    <option value="@NoteSort.TitleAsc">@L["По названию", "Title"]</option>
+                </select>
+            </div>
+            <label class="checkbox small"><input type="checkbox" @bind="_archived" @bind:after="ReloadAsync" /> @L["Показать архив", "Show archive"]</label>
+        </div>
+        @if (_page is null)
+        {
+            <Skeleton Lines="6" />
+        }
+        else if (_page.Items.Count == 0)
+        {
+            <EmptyState IconName="note" Title="@L["Заметок нет", "No notes"]" />
+        }
+        else
+        {
+            <nav class="stack">
+                @foreach (var note in _page.Items)
+                {
+                    <a class="note-list-item @(note.Id == Id ? "active" : null)" href="notes/@note.Id" @key="note.Id">
+                        <div class="row-between">
+                            <strong class="list-title">@(string.IsNullOrWhiteSpace(note.Title) ? L["Без названия", "Untitled"] : note.Title)</strong>
+                            @if (note.IsPinned)
+                            {
+                                <Icon Name="pin" Size="14" Label="@L["Закреплена", "Pinned"]" />
+                            }
+                        </div>
+                        <div class="note-snippet">@note.Snippet</div>
+                        <div class="list-meta"><span>@L.DateTime(note.UpdatedAt)</span>@foreach (var t in note.Tags) { <span class="tag">@t.Name</span> }</div>
+                    </a>
+                }
+            </nav>
+            <Pager Page="_page.Page" TotalPages="_page.TotalPages" PageChanged="PageAsync" />
+        }
+    </aside>
+
+    <section aria-label="@L["Редактор", "Editor"]">
+        @if (Id is { } id)
+        {
+            <NoteEditor @key="id" NoteId="id" Tags="_tags" OnChanged="LoadAsync" OnDeleted="DeletedAsync" OnTagCreated="TagCreated" />
+        }
+        else
+        {
+            <EmptyState IconName="note" Title="@L["Выберите заметку", "Select a note"]" Text="@L["или создайте новую.", "or create a new one."]" />
+        }
+    </section>
+</div>
+
+@code {
+    private PagedResult<NoteSummaryDto>? _page;
+    private List<TagDto> _tags = [];
+    private string _search = string.Empty;
+    private string _tagId = string.Empty;
+    private NoteSort _sort;
+    private bool _archived;
+    private int _pageNumber = 1;
+    private CancellationTokenSource? _debounce;
+
+    [Parameter] public Guid? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "new")] public string? New { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tags = await Api.GetAsync<List<TagDto>>("/api/v1/tags");
+        await LoadAsync();
+        if (New is not null)
+        {
+            await CreateAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        _debounce?.Cancel();
+        _debounce?.Dispose();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _page = await Api.GetAsync<PagedResult<NoteSummaryDto>>("/api/v1/notes" + Query.Of(
+                ("search", _search), ("tagId", _tagId), ("archived", _archived), ("sort", _sort), ("page", _pageNumber), ("pageSize", 30)));
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _pageNumber = 1;
+        await LoadAsync();
+    }
+
+    private async Task PageAsync(int page)
+    {
+        _pageNumber = page;
+        await LoadAsync();
+    }
+
+    private async Task SearchChangedAsync()
+    {
+        _debounce?.Cancel();
+        _debounce = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(300, _debounce.Token);
+            await ReloadAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        try
+        {
+            var note = await Api.PostAsync<NoteDto>("/api/v1/notes", new CreateNoteRequest(null, null, null, false));
+            await LoadAsync();
+            Navigation.NavigateTo($"notes/{note.Id}");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+    }
+
+    private async Task DeletedAsync()
+    {
+        Navigation.NavigateTo("notes");
+        await LoadAsync();
+    }
+
+    private void TagCreated(TagDto tag)
+    {
+        if (_tags.All(t => t.Id != tag.Id))
+        {
+            _tags.Add(tag);
+        }
+    }
+
+    private async Task ExportAsync()
+    {
+        try
+        {
+            var bytes = await Api.GetBytesAsync("/api/v1/export/notes.json");
+            await using var module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/download.js");
+            await module.InvokeVoidAsync("saveFile", "notes.json", "application/json", bytes);
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+    }
+}

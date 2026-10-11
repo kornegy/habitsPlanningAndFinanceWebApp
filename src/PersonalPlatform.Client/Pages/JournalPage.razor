@@ -1,0 +1,236 @@
+@page "/journal"
+@implements IDisposable
+@using PersonalPlatform.Contracts.Notes
+@inject ApiClient Api
+@inject DraftStore Drafts
+@inject ToastService Toasts
+
+<PageTitle>@L["Дневник", "Journal"]</PageTitle>
+<div class="page-header">
+    <h1>@L["Дневник", "Journal"]</h1>
+    <div class="row">
+        <button type="button" class="icon-button" @onclick="() => GoAsync(_date.AddDays(-1))" aria-label="@L["Предыдущий день", "Previous day"]"><Icon Name="chevron-left" /></button>
+        <input type="date" value="@Query.Iso(_date)" max="@Query.Iso(L.Today)" @onchange="PickAsync" aria-label="@L["Дата записи", "Entry date"]" />
+        <button type="button" class="icon-button" @onclick="() => GoAsync(_date.AddDays(1))" disabled="@(_date >= L.Today)" aria-label="@L["Следующий день", "Next day"]"><Icon Name="chevron-right" /></button>
+    </div>
+</div>
+
+<div class="notes-layout">
+    <aside aria-label="@L["Записи", "Entries"]" class="stack">
+        <input type="search" placeholder="@L["Поиск по дневнику", "Search journal"]" maxlength="100" aria-label="@L["Поиск", "Search"]"
+               @bind="_search" @bind:event="oninput" @bind:after="SearchAsync" />
+        @if (_list is not null)
+        {
+            @if (_list.Items.Count == 0)
+            {
+                <p class="muted">@L["Записей пока нет.", "No entries yet."]</p>
+            }
+            @foreach (var entry in _list.Items)
+            {
+                <button type="button" class="note-list-item link-button @(entry.EntryDate == _date ? "active" : null)" @onclick="() => GoAsync(entry.EntryDate)" @key="entry.Id">
+                    <strong>@L.DayHeading(entry.EntryDate)</strong>
+                    <div class="note-snippet">@(entry.Content.Length > 140 ? entry.Content[..140] : entry.Content)</div>
+                </button>
+            }
+            <Pager Page="_list.Page" TotalPages="_list.TotalPages" PageChanged="PageAsync" />
+        }
+    </aside>
+
+    <section class="stack" aria-label="@L["Запись", "Entry"]">
+        <div class="row-between">
+            <h2>@L.DayHeading(_date)</h2>
+            <span class="status-pill @(_error ? "error" : _saved ? "ok" : null)" role="status" aria-live="polite">@StatusText</span>
+        </div>
+        @if (_conflict)
+        {
+            <div class="banner warning" role="alert">
+                <span>@L["Запись изменена в другом месте.", "This entry was changed elsewhere."]</span>
+                <button type="button" class="button button-small" @onclick="ReloadEntryAsync">@L["Загрузить актуальную", "Load the latest"]</button>
+            </div>
+        }
+        <fieldset class="row" aria-label="@L["Настроение", "Mood"]">
+            <legend class="small muted">@L["Настроение", "Mood"]</legend>
+            @for (var i = 1; i <= 5; i++)
+            {
+                var mood = i;
+                <label class="checkbox"><input type="radio" name="mood" checked="@(_mood == mood)" @onchange="() => SetMood(mood)" /> @mood</label>
+            }
+            <button type="button" class="link-button small" @onclick="() => SetMood(null)">@L["Сбросить", "Clear"]</button>
+        </fieldset>
+        <textarea class="note-body" @bind="_content" @bind:event="oninput" @bind:after="Edited" maxlength="50000"
+                  placeholder="@L["Как прошёл день?", "How was your day?"]" aria-label="@L["Текст записи", "Entry text"]"></textarea>
+        @if (_entry is not null)
+        {
+            <div><button type="button" class="button button-danger button-small" @onclick="() => _confirmDelete = true">@L["Удалить запись", "Delete entry"]</button></div>
+        }
+    </section>
+</div>
+<ConfirmDialog @bind-Open="_confirmDelete" Title="@L["Удалить запись?", "Delete entry?"]" Message="@L["Запись за этот день будет удалена.", "The entry for this day will be deleted."]" OnConfirm="DeleteAsync" />
+
+@code {
+    private DateOnly _date;
+    private JournalEntryDto? _entry;
+    private string _content = string.Empty;
+    private int? _mood;
+    private bool _saved = true;
+    private bool _error;
+    private bool _conflict;
+    private bool _saving;
+    private bool _confirmDelete;
+    private PagedResult<JournalEntryDto>? _list;
+    private string _search = string.Empty;
+    private int _page = 1;
+    private CancellationTokenSource? _debounce;
+    private CancellationTokenSource? _searchDebounce;
+
+    private string DraftKey => $"journal:{Query.Iso(_date)}";
+
+    private string StatusText => _conflict ? L["Не сохранено: конфликт версий", "Not saved: version conflict"]
+        : _error ? L["Не сохранено. Повторим при следующем изменении.", "Not saved. Will retry on the next change."]
+        : _saving ? L["Сохранение…", "Saving…"]
+        : _saved ? (_entry is null ? string.Empty : L["Сохранено", "Saved"])
+        : L["Есть несохранённые изменения", "Unsaved changes"];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _date = L.Today;
+        await LoadEntryAsync();
+        await LoadListAsync();
+    }
+
+    public void Dispose()
+    {
+        _debounce?.Cancel();
+        _searchDebounce?.Cancel();
+    }
+
+    private async Task LoadEntryAsync()
+    {
+        _conflict = false;
+        _error = false;
+        _saved = true;
+        try
+        {
+            _entry = await Api.GetAsync<JournalEntryDto>($"/api/v1/journal/{Query.Iso(_date)}");
+        }
+        catch (ApiException ex) when (ex.IsNotFound)
+        {
+            _entry = null;
+        }
+
+        _content = _entry?.Content ?? string.Empty;
+        _mood = _entry?.Mood;
+        if (Drafts.TryGet(DraftKey, out var draft) && draft.Content != _content)
+        {
+            _content = draft.Content;
+            _saved = false;
+        }
+    }
+
+    private async Task LoadListAsync() =>
+        _list = await Api.GetAsync<PagedResult<JournalEntryDto>>("/api/v1/journal" + Query.Of(("search", _search), ("page", _page), ("pageSize", 20)));
+
+    private async Task GoAsync(DateOnly date)
+    {
+        if (date > L.Today)
+        {
+            return;
+        }
+
+        await FlushAsync();
+        _date = date;
+        await LoadEntryAsync();
+    }
+
+    private async Task PickAsync(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse((string?)e.Value, System.Globalization.CultureInfo.InvariantCulture, out var date))
+        {
+            await GoAsync(date);
+        }
+    }
+
+    private void SetMood(int? mood)
+    {
+        _mood = mood;
+        Edited();
+    }
+
+    private void Edited()
+    {
+        _saved = false;
+        Drafts.Set(DraftKey, null, _content);
+        _debounce?.Cancel();
+        _debounce = new CancellationTokenSource();
+        var token = _debounce.Token;
+        _ = Task.Delay(800, token).ContinueWith(t => { if (!t.IsCanceled) { _ = InvokeAsync(FlushAsync); } }, TaskScheduler.Default);
+    }
+
+    private async Task FlushAsync()
+    {
+        if (_saved || _saving || _conflict)
+        {
+            return;
+        }
+
+        _saving = true;
+        var date = _date;
+        try
+        {
+            _entry = await Api.PutAsync<JournalEntryDto>($"/api/v1/journal/{Query.Iso(date)}", new SaveJournalEntryRequest(_content, _mood, _entry?.Version));
+            _saved = _entry.Content == _content && _entry.Mood == _mood;
+            _error = false;
+            Drafts.Remove($"journal:{Query.Iso(date)}");
+            await LoadListAsync();
+        }
+        catch (ApiException ex) when (ex.IsConflict)
+        {
+            _conflict = true;
+        }
+        catch (ApiException)
+        {
+            _error = true;
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ReloadEntryAsync()
+    {
+        Drafts.Remove(DraftKey);
+        await LoadEntryAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        await Api.DeleteAsync($"/api/v1/journal/{Query.Iso(_date)}");
+        Drafts.Remove(DraftKey);
+        await LoadEntryAsync();
+        await LoadListAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        _searchDebounce?.Cancel();
+        _searchDebounce = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(300, _searchDebounce.Token);
+            _page = 1;
+            await LoadListAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task PageAsync(int page)
+    {
+        _page = page;
+        await LoadListAsync();
+    }
+}

@@ -1,0 +1,9 @@
+@inject NavigationManager Navigation
+@code {
+    protected override void OnInitialized()
+    {
+        // Only a local path is carried over, so the login page can never redirect to another site.
+        var returnUrl = Navigation.ToBaseRelativePath(Navigation.Uri);
+        Navigation.NavigateTo(returnUrl.Length == 0 ? "login" : $"login?returnUrl={Uri.EscapeDataString("/" + returnUrl)}", replace: true);
+    }
+}

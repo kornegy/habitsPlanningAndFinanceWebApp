@@ -1,0 +1,310 @@
+@page "/planner"
+@using PersonalPlatform.Contracts.Habits
+@using PersonalPlatform.Contracts.Planner
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<PageTitle>@L["Планировщик", "Planner"]</PageTitle>
+<div class="page-header">
+    <h1>@L["Планировщик", "Planner"]</h1>
+    <div class="row">
+        <div class="tabs" role="tablist">
+            <button type="button" role="tab" class="tab" aria-selected="@(!_week ? "true" : "false")" @onclick="() => SetModeAsync(false)">@L["День", "Day"]</button>
+            <button type="button" role="tab" class="tab" aria-selected="@(_week ? "true" : "false")" @onclick="() => SetModeAsync(true)">@L["Неделя", "Week"]</button>
+        </div>
+        <button type="button" class="icon-button" @onclick="() => ShiftAsync(-1)" aria-label="@L["Назад", "Previous"]"><Icon Name="chevron-left" /></button>
+        <button type="button" class="button button-small" @onclick="TodayAsync">@L["Сегодня", "Today"]</button>
+        <button type="button" class="icon-button" @onclick="() => ShiftAsync(1)" aria-label="@L["Вперёд", "Next"]"><Icon Name="chevron-right" /></button>
+        <input type="date" class="button-small" value="@Query.Iso(_anchor)" @onchange="PickDateAsync" aria-label="@L["Перейти к дате", "Go to date"]" />
+    </div>
+</div>
+
+@if (_data is null)
+{
+    <Skeleton Lines="8" />
+}
+else
+{
+    <div class="planner-layout">
+        <div class="planner-scroll" @ref="_scroll">
+            <div class="planner @(_week ? "planner-days-7" : "planner-days-1")">
+                <div class="planner-corner"></div>
+                @foreach (var day in Days)
+                {
+                    <div class="planner-dayhead @(day == L.Today ? "today" : null)">@L.ShortDay(day)</div>
+                }
+                <div class="planner-hours" aria-hidden="true">
+                    @for (var h = 0; h < 24; h++)
+                    {
+                        <div class="planner-hour ps-@(h * 4 + 1)">@($"{h:00}:00")</div>
+                    }
+                </div>
+                @foreach (var day in Days)
+                {
+                    var date = day;
+                    <div class="planner-day" role="group" aria-label="@L.DayHeading(date)">
+                        @for (var slot = 0; slot < 96; slot++)
+                        {
+                            var index = slot;
+                            <div class="planner-slot ps-@(index + 1) pe-@(index + 2) @(index % 4 == 0 ? "hour" : null) @(_dropTarget == (date, index) ? "drop-target" : null)"
+                                 @onclick="() => NewBlock(date, index)"
+                                 @ondragenter="() => _dropTarget = (date, index)"
+                                 @ondragover:preventDefault="true"
+                                 @ondrop="() => DropAsync(date, index)"></div>
+                        }
+                        @foreach (var placed in Placed(date))
+                        {
+                            var block = placed.Block;
+                            <button type="button" class="planner-block ps-@placed.Start pe-@placed.End @(_conflicted.Contains(block.Id) ? "conflict" : null) @(block.TaskDone ? "task-done" : null)"
+                                    draggable="true" @ondragstart="() => StartDrag(block)" @onclick="() => Edit(block)" @onclick:stopPropagation="true"
+                                    aria-label="@($"{block.Title}, {L.Time(block.StartsAt)}–{L.Time(block.EndsAt)}")">
+                                <span>@block.Title</span>
+                                <span class="block-time">@L.Time(block.StartsAt)–@L.Time(block.EndsAt)</span>
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <aside class="planner-side">
+            <section aria-labelledby="planner-habits">
+                <h2 id="planner-habits">@L["Привычки", "Habits"]</h2>
+                @if (!HabitsForAnchor.Any())
+                {
+                    <p class="muted small">@L["Нет привычек на этот день.", "No habits on this day."]</p>
+                }
+                <ul class="list">
+                    @foreach (var habit in HabitsForAnchor)
+                    {
+                        <li class="list-item" @key="habit.HabitId">
+                            <button type="button" class="habit-check" aria-pressed="@(habit.Completed ? "true" : "false")" disabled="@(habit.Date > L.Today)"
+                                    @onclick="() => ToggleHabitAsync(habit)" aria-label="@habit.Name"><Icon Name="check" Size="16" /></button>
+                            <ColorDot Color="@habit.Color" />
+                            <span class="list-main">@habit.Name</span>
+                        </li>
+                    }
+                </ul>
+            </section>
+            <section aria-labelledby="planner-tasks">
+                <h2 id="planner-tasks">@L["Незапланированные задачи", "Unplanned tasks"]</h2>
+                <p class="muted small">@L["Перетащите задачу в календарь или нажмите «Запланировать».", "Drag a task onto the calendar or use “Plan”."]</p>
+                @if (!UnplannedTasks.Any())
+                {
+                    <p class="muted small">@L["Все задачи на этот период запланированы.", "All tasks in this period are planned."]</p>
+                }
+                <ul class="list">
+                    @foreach (var task in UnplannedTasks)
+                    {
+                        <li class="list-item" draggable="true" @ondragstart="() => StartTaskDrag(task)" @key="task.Id">
+                            <div class="list-main">
+                                <div class="list-title">@task.Title</div>
+                                <div class="list-meta">@L.Date(task.DueDate)@(task.DueTime is { } t ? " " + L.Time(t) : null)</div>
+                            </div>
+                            <button type="button" class="button button-small" @onclick="() => PlanTask(task)">@L["Запланировать", "Plan"]</button>
+                        </li>
+                    }
+                </ul>
+            </section>
+        </aside>
+    </div>
+}
+
+<BlockEditor @bind-Open="_editorOpen" Block="_editing" Date="_newDate" Start="_newStart" TaskId="_newTaskId" DefaultTitle="@_newTitle" OnSaved="OnSavedAsync" />
+
+@code {
+    private PlannerRangeDto? _data;
+    private DateOnly _anchor;
+    private bool _week;
+    private HashSet<Guid> _conflicted = [];
+    private (DateOnly, int)? _dropTarget;
+    private TimeBlockDto? _dragBlock;
+    private PlannerTaskDto? _dragTask;
+    private bool _editorOpen;
+    private TimeBlockDto? _editing;
+    private DateOnly _newDate;
+    private TimeOnly _newStart;
+    private Guid? _newTaskId;
+    private string? _newTitle;
+    private ElementReference _scroll;
+
+    private IEnumerable<DateOnly> Days => _week
+        ? Enumerable.Range(0, 7).Select(i => L.StartOfWeek(_anchor).AddDays(i))
+        : [_anchor];
+
+    private IEnumerable<PlannerHabitDto> HabitsForAnchor => _data?.Habits.Where(h => h.Date == _anchor) ?? [];
+
+    private IEnumerable<PlannerTaskDto> UnplannedTasks =>
+        _data?.TasksDue.Where(t => !t.IsDone && _data.Blocks.All(b => b.TaskId != t.Id)) ?? [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _anchor = L.Today;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var days = Days.ToList();
+        try
+        {
+            _data = await Api.GetAsync<PlannerRangeDto>("/api/v1/planner" + Query.Of(("from", days[0]), ("to", days[^1])));
+            _conflicted = _data.Conflicts.SelectMany(c => new[] { c.FirstId, c.SecondId }).ToHashSet();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+    }
+
+    /// <summary>Grid rows (1-based, 15-minute slots) of the part of each block that falls on <paramref name="date"/>.</summary>
+    private IEnumerable<(TimeBlockDto Block, int Start, int End)> Placed(DateOnly date)
+    {
+        var dayStart = L.ToInstant(date, TimeOnly.MinValue);
+        var dayEnd = L.ToInstant(date.AddDays(1), TimeOnly.MinValue);
+        foreach (var block in _data!.Blocks.Where(b => b.StartsAt < dayEnd && b.EndsAt > dayStart))
+        {
+            var from = block.StartsAt > dayStart ? block.StartsAt : dayStart;
+            var to = block.EndsAt < dayEnd ? block.EndsAt : dayEnd;
+            var start = (int)Math.Floor((from - dayStart).TotalMinutes / 15) + 1;
+            var end = Math.Max((int)Math.Ceiling((to - dayStart).TotalMinutes / 15) + 1, start + 1);
+            yield return (block, Math.Clamp(start, 1, 96), Math.Clamp(end, 2, 97));
+        }
+    }
+
+    private async Task SetModeAsync(bool week)
+    {
+        _week = week;
+        await LoadAsync();
+    }
+
+    private async Task ShiftAsync(int direction)
+    {
+        _anchor = _anchor.AddDays(direction * (_week ? 7 : 1));
+        await LoadAsync();
+    }
+
+    private async Task TodayAsync()
+    {
+        _anchor = L.Today;
+        await LoadAsync();
+    }
+
+    private async Task PickDateAsync(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse((string?)e.Value, System.Globalization.CultureInfo.InvariantCulture, out var date))
+        {
+            _anchor = date;
+            await LoadAsync();
+        }
+    }
+
+    private void NewBlock(DateOnly date, int slot)
+    {
+        _editing = null;
+        _newDate = date;
+        _newStart = TimeOnly.MinValue.AddMinutes(slot * 15);
+        _newTaskId = null;
+        _newTitle = null;
+        _editorOpen = true;
+    }
+
+    private void PlanTask(PlannerTaskDto task)
+    {
+        _editing = null;
+        _newDate = task.DueDate ?? _anchor;
+        _newStart = task.DueTime ?? new TimeOnly(9, 0);
+        _newTaskId = task.Id;
+        _newTitle = task.Title;
+        _editorOpen = true;
+    }
+
+    private void Edit(TimeBlockDto block)
+    {
+        _editing = block;
+        _editorOpen = true;
+    }
+
+    private void StartDrag(TimeBlockDto block)
+    {
+        _dragBlock = block;
+        _dragTask = null;
+    }
+
+    private void StartTaskDrag(PlannerTaskDto task)
+    {
+        _dragTask = task;
+        _dragBlock = null;
+    }
+
+    private async Task DropAsync(DateOnly date, int slot)
+    {
+        _dropTarget = null;
+        var startsAt = L.ToInstant(date, TimeOnly.MinValue.AddMinutes(slot * 15));
+        try
+        {
+            if (_dragBlock is { } block)
+            {
+                var result = await Api.PostAsync<TimeBlockSaveResult>($"/api/v1/planner/blocks/{block.Id}/move",
+                    new MoveTimeBlockRequest(startsAt, startsAt + (block.EndsAt - block.StartsAt), block.Version));
+                ReportConflicts(result);
+            }
+            else if (_dragTask is { } task)
+            {
+                var result = await Api.PostAsync<TimeBlockSaveResult>("/api/v1/planner/blocks",
+                    new CreateTimeBlockRequest(task.Title, null, startsAt, startsAt.AddHours(1), task.Id, null));
+                ReportConflicts(result);
+            }
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Code == "time_block_overlap"
+                ? L["Время пересекается с другим блоком.", "This time overlaps another block."]
+                : ex.IsConflict ? L["Блок изменён в другом месте. Данные обновлены.", "The block was changed elsewhere. Reloaded."] : ex.Message);
+        }
+
+        _dragBlock = null;
+        _dragTask = null;
+        await LoadAsync();
+    }
+
+    private async Task OnSavedAsync(TimeBlockSaveResult? result)
+    {
+        if (result is not null)
+        {
+            ReportConflicts(result);
+        }
+
+        await LoadAsync();
+    }
+
+    private void ReportConflicts(TimeBlockSaveResult result)
+    {
+        if (result.Conflicts.Count > 0)
+        {
+            Toasts.Info(L[$"Пересекается с: {string.Join(", ", result.Conflicts.Select(c => c.Title))}", $"Overlaps: {string.Join(", ", result.Conflicts.Select(c => c.Title))}"]);
+        }
+    }
+
+    private async Task ToggleHabitAsync(PlannerHabitDto habit)
+    {
+        var url = $"/api/v1/habits/{habit.HabitId}/completions/{Query.Iso(habit.Date)}";
+        try
+        {
+            if (habit.Completed)
+            {
+                await Api.DeleteAsync<HabitCompletionResult>(url);
+            }
+            else
+            {
+                await Api.PutAsync<HabitCompletionResult>(url, new { });
+            }
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+}

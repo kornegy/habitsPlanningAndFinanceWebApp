@@ -1,0 +1,105 @@
+@using PersonalPlatform.Contracts.Finance
+@inject ApiClient Api
+@inject UserContext User
+
+<Modal Open="Open" OpenChanged="OpenChanged" Title="@(Account is null ? L["Новый счёт", "New account"] : L["Счёт", "Account"])">
+    <ChildContent>
+        <form id="account-form" class="stack" @onsubmit="SaveAsync">
+            <label class="field"><span>@L["Название", "Name"]</span><input @bind="_name" required maxlength="100" /></label>
+            <div class="grid-2">
+                <label class="field">
+                    <span>@L["Тип", "Type"]</span>
+                    <select @bind="_type">
+                        <option value="@AccountType.Checking">@L["Карта / текущий", "Card / checking"]</option>
+                        <option value="@AccountType.Cash">@L["Наличные", "Cash"]</option>
+                        <option value="@AccountType.Savings">@L["Сбережения", "Savings"]</option>
+                        <option value="@AccountType.CreditCard">@L["Кредитная карта", "Credit card"]</option>
+                        <option value="@AccountType.Investment">@L["Инвестиции", "Investments"]</option>
+                        <option value="@AccountType.Other">@L["Другое", "Other"]</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>@L["Валюта", "Currency"]</span>
+                    <select @bind="_currency" disabled="@(Account is not null)">
+                        @foreach (var c in User.Reference?.Currencies ?? [])
+                        {
+                            <option value="@c.Code">@c.Code</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            <div class="grid-2">
+                <label class="field"><span>@L["Начальный баланс", "Opening balance"]</span><input type="number" step="any" @bind="_opening" /></label>
+                <label class="field"><span>@L["На дату", "As of"]</span><input type="date" @bind="_openingDate" /></label>
+            </div>
+            @if (Account is not null)
+            {
+                <p class="muted small">@L["Валюту счёта изменить нельзя: в ней записаны все операции.", "The currency cannot change: all operations are recorded in it."]</p>
+            }
+            <ErrorText Error="_error" />
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="button" @onclick="() => OpenChanged.InvokeAsync(false)">@L["Отмена", "Cancel"]</button>
+        <button type="submit" form="account-form" class="button button-primary" disabled="@_busy">@L["Сохранить", "Save"]</button>
+    </Footer>
+</Modal>
+
+@code {
+    private string _name = string.Empty;
+    private AccountType _type = AccountType.Checking;
+    private string _currency = "RUB";
+    private decimal _opening;
+    private DateOnly _openingDate;
+    private ApiException? _error;
+    private bool _busy;
+    private bool _wasOpen;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public AccountDto? Account { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _error = null;
+            _name = Account?.Name ?? string.Empty;
+            _type = Account?.Type ?? AccountType.Checking;
+            _currency = Account?.CurrencyCode ?? User.Currency;
+            _opening = Account?.OpeningBalance ?? 0m;
+            _openingDate = Account?.OpeningDate ?? L.Today;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            if (Account is null)
+            {
+                await Api.PostAsync<AccountDto>("/api/v1/finance/accounts", new CreateAccountRequest(_name, _type, _currency, _opening, _openingDate));
+            }
+            else
+            {
+                await Api.PutAsync<AccountDto>($"/api/v1/finance/accounts/{Account.Id}", new UpdateAccountRequest(_name, _type, _opening, _openingDate, Account.Version));
+            }
+
+            await OnSaved.InvokeAsync();
+            await OpenChanged.InvokeAsync(false);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

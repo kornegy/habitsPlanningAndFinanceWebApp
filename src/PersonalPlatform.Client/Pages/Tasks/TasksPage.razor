@@ -1,0 +1,302 @@
+@page "/tasks"
+@implements IDisposable
+@using PersonalPlatform.Contracts.Organization
+@using PersonalPlatform.Contracts.Tasks
+@inject ApiClient Api
+@inject ToastService Toasts
+@inject AppEvents Events
+@inject NavigationManager Navigation
+
+<PageTitle>@L["Задачи", "Tasks"]</PageTitle>
+<div class="page-header">
+    <h1>@L["Задачи", "Tasks"]</h1>
+    <button type="button" class="button button-primary" @onclick="() => OpenEditor(null)"><Icon Name="plus" />@L["Новая задача", "New task"]</button>
+</div>
+
+<div class="tabs" role="tablist">
+    @foreach (var (view, ru, en) in Views)
+    {
+        <button type="button" role="tab" class="tab" aria-selected="@(_view == view ? "true" : "false")" @onclick="() => SetViewAsync(view)">@L[ru, en]</button>
+    }
+</div>
+
+<div class="toolbar">
+    <input type="search" class="grow" placeholder="@L["Поиск", "Search"]" aria-label="@L["Поиск задач", "Search tasks"]" maxlength="100"
+           @bind="_search" @bind:event="oninput" @bind:after="SearchChangedAsync" />
+    <select aria-label="@L["Приоритет", "Priority"]" @bind="_priority" @bind:after="ReloadFirstPageAsync">
+        <option value="">@L["Любой приоритет", "Any priority"]</option>
+        <option value="High">@L["Высокий", "High"]</option>
+        <option value="Medium">@L["Средний", "Medium"]</option>
+        <option value="Low">@L["Низкий", "Low"]</option>
+        <option value="None">@L["Без приоритета", "None"]</option>
+    </select>
+    <select aria-label="@L["Категория", "Category"]" @bind="_categoryId" @bind:after="ReloadFirstPageAsync">
+        <option value="">@L["Все категории", "All categories"]</option>
+        @foreach (var c in _categories)
+        {
+            <option value="@c.Id">@c.Name</option>
+        }
+    </select>
+    <select aria-label="@L["Тег", "Tag"]" @bind="_tagId" @bind:after="ReloadFirstPageAsync">
+        <option value="">@L["Все теги", "All tags"]</option>
+        @foreach (var t in _tags)
+        {
+            <option value="@t.Id">@t.Name</option>
+        }
+    </select>
+    <select aria-label="@L["Сортировка", "Sort"]" @bind="_sort" @bind:after="ReloadFirstPageAsync">
+        <option value="@TaskSort.DueDate">@L["По сроку", "By due date"]</option>
+        <option value="@TaskSort.Priority">@L["По приоритету", "By priority"]</option>
+        <option value="@TaskSort.CreatedAt">@L["По созданию", "By creation"]</option>
+        <option value="@TaskSort.Title">@L["По названию", "By title"]</option>
+    </select>
+</div>
+
+@if (_selected.Count > 0)
+{
+    <div class="banner" role="region" aria-label="@L["Действия с выбранными", "Bulk actions"]">
+        <span>@L[$"Выбрано: {_selected.Count}", $"Selected: {_selected.Count}"]</span>
+        <div class="row">
+            <button type="button" class="button button-small" @onclick="() => BulkAsync(BulkTaskAction.Complete)">@L["Выполнить", "Complete"]</button>
+            <button type="button" class="button button-small" @onclick="() => BulkAsync(BulkTaskAction.Reopen)">@L["Вернуть", "Reopen"]</button>
+            <input type="date" class="button-small" @bind="_bulkDate" aria-label="@L["Новая дата", "New date"]" />
+            <button type="button" class="button button-small" @onclick="() => BulkAsync(BulkTaskAction.Reschedule)">@L["Перенести", "Reschedule"]</button>
+            <button type="button" class="button button-small button-danger" @onclick="() => _confirmBulkDelete = true">@L["Удалить", "Delete"]</button>
+            <button type="button" class="link-button" @onclick="() => _selected.Clear()">@L["Снять выбор", "Clear"]</button>
+        </div>
+    </div>
+}
+
+@if (_page is null)
+{
+    <Skeleton Lines="6" />
+}
+else if (_page.Items.Count == 0)
+{
+    <EmptyState IconName="tasks" Title="@L["Задач нет", "No tasks"]" Text="@L["Создайте задачу или измените фильтры.", "Create a task or change the filters."]" />
+}
+else
+{
+    <ul class="list">
+        @foreach (var task in _page.Items)
+        {
+            <li class="list-item @(task.Status == TaskItemStatus.Done ? "done" : null)" @key="task.Id">
+                <input type="checkbox" checked="@_selected.Contains(task.Id)" @onchange="() => ToggleSelected(task.Id)" aria-label="@L[$"Выбрать: {task.Title}", $"Select: {task.Title}"]" />
+                <button type="button" class="habit-check" aria-pressed="@(task.Status == TaskItemStatus.Done ? "true" : "false")" @onclick="() => ToggleDoneAsync(task)"
+                        aria-label="@L[$"Выполнено: {task.Title}", $"Done: {task.Title}"]"><Icon Name="check" Size="16" /></button>
+                <div class="list-main">
+                    <button type="button" class="link-button list-title" @onclick="() => OpenEditor(task)">@task.Title</button>
+                    <div class="list-meta">
+                        @if (task.DueDate is { } due)
+                        {
+                            <span class="@(task.IsOverdue ? "negative" : null)">@(task.IsOverdue ? L["Просрочено: ", "Overdue: "] : null)@L.Date(due)@(task.DueTime is { } t ? " " + L.Time(t) : null)</span>
+                        }
+                        @if (task.Priority != TaskPriority.None)
+                        {
+                            <span class="@(task.Priority == TaskPriority.High ? "priority-high" : null)"><Icon Name="flag" Size="14" /> @PriorityName(task.Priority)</span>
+                        }
+                        @if (task.SeriesId is not null)
+                        {
+                            <span><Icon Name="repeat" Size="14" Label="@L["Повторяется", "Recurring"]" /></span>
+                        }
+                        @if (task.Subtasks.Count > 0)
+                        {
+                            <span>@task.Subtasks.Count(s => s.IsDone)/@task.Subtasks.Count</span>
+                        }
+                        @foreach (var tag in task.Tags)
+                        {
+                            <span class="tag">@tag.Name</span>
+                        }
+                    </div>
+                </div>
+                <button type="button" class="icon-button" @onclick="() => RescheduleTomorrowAsync(task)" aria-label="@L["Перенести на завтра", "Move to tomorrow"]" title="@L["На завтра", "Tomorrow"]"><Icon Name="arrow-right" /></button>
+                <button type="button" class="icon-button" @onclick="() => _deleting = task" aria-label="@L["Удалить", "Delete"]"><Icon Name="trash" /></button>
+            </li>
+        }
+    </ul>
+    <Pager Page="_page.Page" TotalPages="_page.TotalPages" PageChanged="LoadPageAsync" />
+}
+
+<TaskEditor @bind-Open="_editorOpen" Task="_editing" Categories="_categories" Tags="_tags" DefaultDueDate="DefaultDueDate" OnSaved="OnSavedAsync" />
+<ConfirmDialog Open="_deleting is not null" OpenChanged="v => { if (!v) _deleting = null; }" Title="@L["Удалить задачу?", "Delete task?"]"
+               Message="@L["Задача будет удалена без возможности восстановления.", "The task will be permanently deleted."]" OnConfirm="DeleteAsync" />
+<ConfirmDialog @bind-Open="_confirmBulkDelete" Title="@L["Удалить выбранные задачи?", "Delete selected tasks?"]"
+               Message="@L[$"Будет удалено задач: {_selected.Count}.", $"{_selected.Count} tasks will be permanently deleted."]" OnConfirm="() => BulkAsync(BulkTaskAction.Delete)" />
+
+@code {
+    private static readonly (TaskView View, string Ru, string En)[] Views =
+    [
+        (TaskView.Today, "Сегодня", "Today"), (TaskView.Upcoming, "Предстоящие", "Upcoming"), (TaskView.Overdue, "Просроченные", "Overdue"),
+        (TaskView.Unscheduled, "Без срока", "Someday"), (TaskView.Completed, "Завершённые", "Completed"), (TaskView.All, "Все", "All"),
+    ];
+
+    private PagedResult<TaskDto>? _page;
+    private IReadOnlyList<CategoryDto> _categories = [];
+    private IReadOnlyList<TagDto> _tags = [];
+    private TaskView _view = TaskView.Today;
+    private string _search = string.Empty;
+    private string _priority = string.Empty;
+    private string _categoryId = string.Empty;
+    private string _tagId = string.Empty;
+    private TaskSort _sort = TaskSort.DueDate;
+    private int _pageNumber = 1;
+    private readonly HashSet<Guid> _selected = [];
+    private DateOnly? _bulkDate;
+    private bool _editorOpen;
+    private TaskDto? _editing;
+    private TaskDto? _deleting;
+    private bool _confirmBulkDelete;
+    private CancellationTokenSource? _searchDebounce;
+
+    [SupplyParameterFromQuery(Name = "view")] public string? ViewParameter { get; set; }
+
+    private DateOnly? DefaultDueDate => _view is TaskView.Today or TaskView.All ? L.Today : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Events.DataChanged += OnDataChanged;
+        if (Enum.TryParse<TaskView>(ViewParameter, out var view))
+        {
+            _view = view;
+        }
+
+        _categories = await Api.GetAsync<List<CategoryDto>>("/api/v1/categories?scope=Task");
+        _tags = await Api.GetAsync<List<TagDto>>("/api/v1/tags");
+        await LoadAsync();
+    }
+
+    public void Dispose()
+    {
+        Events.DataChanged -= OnDataChanged;
+        _searchDebounce?.Cancel();
+        _searchDebounce?.Dispose();
+    }
+
+    private void OnDataChanged() => _ = InvokeAsync(LoadAsync);
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _page = await Api.GetAsync<PagedResult<TaskDto>>("/api/v1/tasks" + Query.Of(
+                ("view", _view), ("search", _search), ("priority", _priority), ("categoryId", _categoryId), ("tagId", _tagId),
+                ("sort", _sort), ("page", _pageNumber), ("pageSize", 25)));
+            _selected.IntersectWith(_page.Items.Select(t => t.Id));
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task SetViewAsync(TaskView view)
+    {
+        _view = view;
+        _selected.Clear();
+        Navigation.NavigateTo($"tasks?view={view}", replace: true);
+        await ReloadFirstPageAsync();
+    }
+
+    private async Task ReloadFirstPageAsync()
+    {
+        _pageNumber = 1;
+        await LoadAsync();
+    }
+
+    private async Task LoadPageAsync(int page)
+    {
+        _pageNumber = page;
+        await LoadAsync();
+    }
+
+    private async Task SearchChangedAsync()
+    {
+        // Debounce typing so that a search request is sent only after a short pause.
+        _searchDebounce?.Cancel();
+        _searchDebounce = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(300, _searchDebounce.Token);
+            await ReloadFirstPageAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private void ToggleSelected(Guid id)
+    {
+        if (!_selected.Remove(id))
+        {
+            _selected.Add(id);
+        }
+    }
+
+    private void OpenEditor(TaskDto? task)
+    {
+        _editing = task;
+        _editorOpen = true;
+    }
+
+    private async Task OnSavedAsync(TaskDto task)
+    {
+        Toasts.Success(L["Сохранено", "Saved"]);
+        await LoadAsync();
+    }
+
+    private async Task ToggleDoneAsync(TaskDto task)
+    {
+        await RunAsync(() => Api.PostAsync<TaskDto>($"/api/v1/tasks/{task.Id}/status",
+            new SetTaskStatusRequest(task.Status == TaskItemStatus.Done ? TaskItemStatus.Open : TaskItemStatus.Done)));
+    }
+
+    private async Task RescheduleTomorrowAsync(TaskDto task) =>
+        await RunAsync(() => Api.PostAsync<TaskDto>($"/api/v1/tasks/{task.Id}/reschedule", new RescheduleTaskRequest(L.Today.AddDays(1), task.DueTime)));
+
+    private async Task DeleteAsync()
+    {
+        var task = _deleting!;
+        _deleting = null;
+        await RunAsync(() => Api.DeleteAsync($"/api/v1/tasks/{task.Id}"));
+    }
+
+    private async Task BulkAsync(BulkTaskAction action)
+    {
+        if (action == BulkTaskAction.Reschedule && _bulkDate is null)
+        {
+            Toasts.Error(L["Выберите дату", "Choose a date"]);
+            return;
+        }
+
+        var ids = _selected.ToList();
+        await RunAsync(async () =>
+        {
+            var result = await Api.PostAsync<BulkTaskResult>("/api/v1/tasks/bulk", new BulkTaskRequest(ids, action, action == BulkTaskAction.Reschedule ? _bulkDate : null));
+            Toasts.Success(L[$"Обработано задач: {result.Affected}", $"{result.Affected} tasks updated"]);
+            _selected.Clear();
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+
+    private string PriorityName(TaskPriority priority) => priority switch
+    {
+        TaskPriority.High => L["Высокий", "High"],
+        TaskPriority.Medium => L["Средний", "Medium"],
+        _ => L["Низкий", "Low"],
+    };
+}

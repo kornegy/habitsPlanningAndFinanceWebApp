@@ -1,0 +1,233 @@
+@page "/finance/transactions"
+@using PersonalPlatform.Contracts.Finance
+@inject ApiClient Api
+@inject ToastService Toasts
+@inject IJSRuntime Js
+
+<PageTitle>@L["Операции", "Transactions"]</PageTitle>
+<div class="page-header">
+    <h1>@L["Операции", "Transactions"]</h1>
+    <div class="row">
+        <button type="button" class="button" @onclick="ExportAsync"><Icon Name="download" />CSV</button>
+        <button type="button" class="button" @onclick="() => New(TransactionKind.Transfer)"><Icon Name="transfer" />@L["Перевод", "Transfer"]</button>
+        <button type="button" class="button" @onclick="() => New(TransactionKind.Income)">@L["Доход", "Income"]</button>
+        <button type="button" class="button button-primary" @onclick="() => New(TransactionKind.Expense)"><Icon Name="plus" />@L["Расход", "Expense"]</button>
+    </div>
+</div>
+<FinanceTabs />
+
+<div class="toolbar">
+    <input type="search" class="grow" placeholder="@L["Поиск по описанию", "Search description"]" aria-label="@L["Поиск", "Search"]" maxlength="100"
+           @bind="_search" @bind:event="oninput" @bind:after="SearchChangedAsync" />
+    <input type="date" @bind="_from" @bind:after="ReloadAsync" aria-label="@L["С даты", "From"]" />
+    <input type="date" @bind="_to" @bind:after="ReloadAsync" aria-label="@L["По дату", "To"]" />
+    <select @bind="_accountId" @bind:after="ReloadAsync" aria-label="@L["Счёт", "Account"]">
+        <option value="">@L["Все счета", "All accounts"]</option>
+        @foreach (var a in _accounts)
+        {
+            <option value="@a.Id">@a.Name</option>
+        }
+    </select>
+    <select @bind="_categoryId" @bind:after="ReloadAsync" aria-label="@L["Категория", "Category"]">
+        <option value="">@L["Все категории", "All categories"]</option>
+        @foreach (var c in _categories)
+        {
+            <option value="@c.Id">@c.Name</option>
+        }
+    </select>
+    <select @bind="_kind" @bind:after="ReloadAsync" aria-label="@L["Тип", "Type"]">
+        <option value="">@L["Все типы", "All types"]</option>
+        <option value="Expense">@L["Расходы", "Expenses"]</option>
+        <option value="Income">@L["Доходы", "Income"]</option>
+        <option value="Transfer">@L["Переводы", "Transfers"]</option>
+    </select>
+    <select @bind="_sort" @bind:after="ReloadAsync" aria-label="@L["Сортировка", "Sort"]">
+        <option value="@TransactionSort.DateDesc">@L["Сначала новые", "Newest first"]</option>
+        <option value="@TransactionSort.DateAsc">@L["Сначала старые", "Oldest first"]</option>
+        <option value="@TransactionSort.AmountDesc">@L["Сумма ↓", "Amount ↓"]</option>
+        <option value="@TransactionSort.AmountAsc">@L["Сумма ↑", "Amount ↑"]</option>
+    </select>
+</div>
+
+@if (_page is null)
+{
+    <Skeleton Lines="8" />
+}
+else if (_page.Items.Count == 0)
+{
+    <EmptyState IconName="wallet" Title="@L["Операций нет", "No transactions"]" Text="@(_accounts.Count == 0 ? L["Сначала создайте счёт в разделе «Обзор».", "Create an account on the Overview tab first."] : L["Добавьте расход или доход.", "Add an expense or income."])" />
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr><th>@L["Дата", "Date"]</th><th>@L["Описание", "Description"]</th><th class="hide-narrow">@L["Счёт", "Account"]</th><th class="right">@L["Сумма", "Amount"]</th><th><span class="visually-hidden">@L["Действия", "Actions"]</span></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var tx in _page.Items)
+            {
+                <tr @key="tx.Id">
+                    <td class="nowrap">@L.Date(tx.OccurredOn)</td>
+                    <td>
+                        <div>@(tx.Description ?? KindName(tx.Kind))</div>
+                        <div class="list-meta">
+                            @if (tx.CategoryName is not null)
+                            {
+                                <span class="tag">@tx.CategoryName</span>
+                            }
+                            @if (tx.RecurringTransactionId is not null)
+                            {
+                                <Icon Name="repeat" Size="14" Label="@L["Регулярная", "Recurring"]" />
+                            }
+                        </div>
+                    </td>
+                    <td class="hide-narrow muted">@tx.AccountName@(tx.DestinationAccountName is { } d ? $" → {d}" : null)</td>
+                    <td class="right num nowrap @(tx.Kind == TransactionKind.Expense ? "negative" : tx.Kind == TransactionKind.Income ? "positive" : null)">
+                        @(tx.Kind == TransactionKind.Expense ? "−" : tx.Kind == TransactionKind.Income ? "+" : null)@L.Money(tx.Amount, tx.CurrencyCode)
+                    </td>
+                    <td class="right nowrap">
+                        <button type="button" class="icon-button" @onclick="() => Edit(tx)" aria-label="@L["Изменить", "Edit"]"><Icon Name="edit" /></button>
+                        <button type="button" class="icon-button" @onclick="() => _deleting = tx" aria-label="@L["Удалить", "Delete"]"><Icon Name="trash" /></button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <Pager Page="_page.Page" TotalPages="_page.TotalPages" PageChanged="PageAsync" />
+}
+
+<TransactionEditor @bind-Open="_editorOpen" Transaction="_editing" DefaultKind="_newKind" Accounts="_accounts" Categories="_categories" OnSaved="SavedAsync" />
+<ConfirmDialog Open="_deleting is not null" OpenChanged="v => { if (!v) _deleting = null; }" Title="@L["Удалить операцию?", "Delete transaction?"]"
+               Message="@L["Балансы счетов будут пересчитаны.", "Account balances will be recalculated."]" OnConfirm="DeleteAsync" />
+
+@code {
+    private PagedResult<TransactionDto>? _page;
+    private IReadOnlyList<AccountDto> _accounts = [];
+    private IReadOnlyList<FinanceCategoryDto> _categories = [];
+    private string _search = string.Empty;
+    private DateOnly? _from;
+    private DateOnly? _to;
+    private string _accountId = string.Empty;
+    private string _categoryId = string.Empty;
+    private string _kind = string.Empty;
+    private TransactionSort _sort;
+    private int _pageNumber = 1;
+    private bool _editorOpen;
+    private TransactionDto? _editing;
+    private TransactionKind _newKind;
+    private TransactionDto? _deleting;
+    private CancellationTokenSource? _debounce;
+
+    [SupplyParameterFromQuery(Name = "new")] public string? NewKind { get; set; }
+    [SupplyParameterFromQuery(Name = "accountId")] public Guid? AccountFilter { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _accountId = AccountFilter?.ToString() ?? string.Empty;
+        _accounts = (await Api.GetAsync<AccountsOverviewDto>("/api/v1/finance/accounts?includeArchived=true")).Accounts;
+        _categories = await Api.GetAsync<List<FinanceCategoryDto>>("/api/v1/finance/categories");
+        await LoadAsync();
+        if (Enum.TryParse<TransactionKind>(NewKind, ignoreCase: true, out var kind))
+        {
+            New(kind);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _page = await Api.GetAsync<PagedResult<TransactionDto>>("/api/v1/finance/transactions" + Query.Of(
+                ("from", _from), ("to", _to), ("accountId", _accountId), ("categoryId", _categoryId), ("kind", _kind), ("search", _search),
+                ("sort", _sort), ("page", _pageNumber), ("pageSize", 25)));
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _pageNumber = 1;
+        await LoadAsync();
+    }
+
+    private async Task PageAsync(int page)
+    {
+        _pageNumber = page;
+        await LoadAsync();
+    }
+
+    private async Task SearchChangedAsync()
+    {
+        _debounce?.Cancel();
+        _debounce = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(300, _debounce.Token);
+            await ReloadAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private void New(TransactionKind kind)
+    {
+        _editing = null;
+        _newKind = kind;
+        _editorOpen = true;
+    }
+
+    private void Edit(TransactionDto tx)
+    {
+        _editing = tx;
+        _editorOpen = true;
+    }
+
+    private async Task SavedAsync()
+    {
+        Toasts.Success(L["Сохранено", "Saved"]);
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        var tx = _deleting!;
+        _deleting = null;
+        try
+        {
+            await Api.DeleteAsync($"/api/v1/finance/transactions/{tx.Id}");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task ExportAsync()
+    {
+        var to = _to ?? L.Today;
+        var from = _from ?? to.AddYears(-1);
+        try
+        {
+            var bytes = await Api.GetBytesAsync("/api/v1/export/transactions.csv" + Query.Of(("from", from), ("to", to)));
+            await using var module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/download.js");
+            await module.InvokeVoidAsync("saveFile", $"transactions-{Query.Iso(from)}-{Query.Iso(to)}.csv", "text/csv", bytes);
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+    }
+
+    private string KindName(TransactionKind kind) => kind switch
+    {
+        TransactionKind.Income => L["Доход", "Income"],
+        TransactionKind.Transfer => L["Перевод", "Transfer"],
+        _ => L["Расход", "Expense"],
+    };
+}

@@ -179,6 +179,7 @@ static void ConfigurePipeline(WebApplication app)
     app.UseMiddleware<RequestBodyLimitMiddleware>();
 
     app.UseRouting();
+    app.Use(RequestLoggingMiddleware.CaptureRoute);
     app.UseRequestTimeouts();
     app.UseAuthentication();
     app.UseRateLimiter();

@@ -1,0 +1,10 @@
+<div class="skeleton" aria-busy="true" aria-label="@L["Загрузка", "Loading"]">
+    @for (var i = 0; i < Lines; i++)
+    {
+        <div class="skeleton-line"></div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Lines { get; set; } = 3;
+}

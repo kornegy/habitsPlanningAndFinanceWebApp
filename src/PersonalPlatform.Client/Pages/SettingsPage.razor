@@ -1,0 +1,290 @@
+@page "/settings"
+@using PersonalPlatform.Contracts.Auth
+@using PersonalPlatform.Contracts.Organization
+@using PersonalPlatform.Contracts.Profile
+@inject ApiClient Api
+@inject UserContext User
+@inject AuthSession Session
+@inject ToastService Toasts
+
+<PageTitle>@L["Настройки", "Settings"]</PageTitle>
+<div class="page-header"><h1>@L["Настройки", "Settings"]</h1></div>
+
+<section class="section" aria-labelledby="profile-title">
+    <h2 id="profile-title">@L["Профиль и формат", "Profile and formats"]</h2>
+    @if (User.Profile is { } profile)
+    {
+        <form class="stack" @onsubmit="SaveProfileAsync">
+            <div class="grid-2">
+                <label class="field"><span>@L["Имя", "Name"]</span><input @bind="_displayName" maxlength="80" /></label>
+                <label class="field"><span>Email</span><input value="@profile.Email" disabled /></label>
+            </div>
+            <div class="grid-3">
+                <label class="field">
+                    <span>@L["Часовой пояс", "Time zone"]</span>
+                    <select @bind="_timeZone">
+                        @foreach (var tz in User.Reference?.TimeZones ?? [])
+                        {
+                            <option value="@tz">@tz</option>
+                        }
+                    </select>
+                </label>
+                <label class="field">
+                    <span>@L["Язык", "Language"]</span>
+                    <select @bind="_locale">
+                        <option value="ru-RU">Русский</option>
+                        <option value="en-US">English</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>@L["Основная валюта", "Main currency"]</span>
+                    <select @bind="_currency">
+                        @foreach (var c in User.Reference?.Currencies ?? [])
+                        {
+                            <option value="@c.Code">@c.Code</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            <div class="grid-3">
+                <label class="field">
+                    <span>@L["Формат даты", "Date format"]</span>
+                    <select @bind="_dateFormat">
+                        <option value="@DateFormatPreference.DayMonthYear">31.12.2026</option>
+                        <option value="@DateFormatPreference.MonthDayYear">12/31/2026</option>
+                        <option value="@DateFormatPreference.Iso">2026-12-31</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>@L["Неделя начинается", "Week starts on"]</span>
+                    <select @bind="_firstDay">
+                        <option value="@DayOfWeek.Monday">@L["С понедельника", "Monday"]</option>
+                        <option value="@DayOfWeek.Sunday">@L["С воскресенья", "Sunday"]</option>
+                    </select>
+                </label>
+                <label class="checkbox"><input type="checkbox" @bind="_allowOverlaps" /> @L["Разрешить пересечение блоков в планировщике", "Allow overlapping planner blocks"]</label>
+            </div>
+            <ErrorText Error="_profileError" />
+            <div><button type="submit" class="button button-primary">@L["Сохранить", "Save"]</button></div>
+        </form>
+    }
+</section>
+
+<section class="section" aria-labelledby="org-title">
+    <h2 id="org-title">@L["Категории задач и привычек, теги", "Task and habit categories, tags"]</h2>
+    <form class="toolbar" @onsubmit="AddCategoryAsync">
+        <input class="grow" @bind="_categoryName" maxlength="60" required placeholder="@L["Новая категория", "New category"]" aria-label="@L["Новая категория", "New category"]" />
+        <select @bind="_categoryScope" aria-label="@L["Для", "For"]">
+            <option value="@CategoryScope.Task">@L["Задачи", "Tasks"]</option>
+            <option value="@CategoryScope.Habit">@L["Привычки", "Habits"]</option>
+        </select>
+        <input type="color" @bind="_categoryColor" aria-label="@L["Цвет", "Colour"]" />
+        <button type="submit" class="button"><Icon Name="plus" />@L["Добавить", "Add"]</button>
+    </form>
+    <ul class="list">
+        @foreach (var c in _categories)
+        {
+            <li class="list-item" @key="c.Id">
+                <ColorDot Color="@c.Color" />
+                <span class="list-main">@c.Name <span class="tag">@(c.Scope == CategoryScope.Task ? L["задачи", "tasks"] : L["привычки", "habits"])</span></span>
+                <button type="button" class="icon-button" @onclick="() => DeleteCategoryAsync(c)" aria-label="@L["Удалить категорию", "Delete category"]"><Icon Name="trash" /></button>
+            </li>
+        }
+    </ul>
+    <div class="row">
+        @foreach (var tag in _tags)
+        {
+            <span class="tag" @key="tag.Id">@tag.Name <button type="button" class="icon-button" @onclick="() => DeleteTagAsync(tag)" aria-label="@L[$"Удалить тег {tag.Name}", $"Delete tag {tag.Name}"]"><Icon Name="x" Size="12" /></button></span>
+        }
+    </div>
+</section>
+
+<section class="section" aria-labelledby="security-title">
+    <h2 id="security-title">@L["Безопасность", "Security"]</h2>
+    <form class="stack" @onsubmit="ChangePasswordAsync">
+        <div class="grid-2">
+            <label class="field"><span>@L["Текущий пароль", "Current password"]</span><input type="password" @bind="_currentPassword" autocomplete="current-password" required maxlength="128" /></label>
+            <label class="field"><span>@L["Новый пароль", "New password"]</span><input type="password" @bind="_newPassword" autocomplete="new-password" required minlength="@PasswordPolicy.MinLength" maxlength="@PasswordPolicy.MaxLength" /></label>
+        </div>
+        <ErrorText Error="_passwordError" />
+        <div><button type="submit" class="button">@L["Сменить пароль", "Change password"]</button></div>
+    </form>
+
+    <h3>@L["Активные сеансы", "Active sessions"]</h3>
+    <ul class="list">
+        @foreach (var s in _sessions)
+        {
+            <li class="list-item" @key="s.Id">
+                <div class="list-main">
+                    <div class="list-title">@DeviceName(s.Device) @if (s.IsCurrent) { <span class="tag">@L["этот сеанс", "this session"]</span> }</div>
+                    <div class="list-meta"><span>@L["Активность: ", "Last active: "]@L.DateTime(s.LastUsedAt)</span><span>@s.IpAddress</span></div>
+                </div>
+                <button type="button" class="button button-small" @onclick="() => RevokeAsync(s)">@L["Завершить", "Sign out"]</button>
+            </li>
+        }
+    </ul>
+    <button type="button" class="button button-danger" @onclick="() => _confirmRevokeAll = true">@L["Выйти на всех устройствах", "Sign out everywhere"]</button>
+</section>
+
+<section class="section" aria-labelledby="danger-title">
+    <h2 id="danger-title">@L["Удаление аккаунта", "Delete account"]</h2>
+    <p class="muted">@L["Аккаунт и все данные (задачи, привычки, план, финансы, заметки, дневник) будут удалены без возможности восстановления. Перед удалением можно выгрузить операции и заметки.", "Your account and all data (tasks, habits, plans, finance, notes, journal) will be permanently deleted. You can export transactions and notes first."]</p>
+    <form class="stack" @onsubmit="DeleteAccountAsync">
+        <div class="grid-2">
+            <label class="field"><span>@L["Пароль", "Password"]</span><input type="password" @bind="_deletePassword" autocomplete="current-password" required maxlength="128" /></label>
+            <label class="field"><span>@L["Введите DELETE для подтверждения", "Type DELETE to confirm"]</span><input @bind="_deleteConfirmation" required autocomplete="off" /></label>
+        </div>
+        <ErrorText Error="_deleteError" />
+        <div><button type="submit" class="button button-danger" disabled="@(_deleteConfirmation != DeleteAccountRequest.RequiredConfirmation)">@L["Удалить аккаунт навсегда", "Delete account permanently"]</button></div>
+    </form>
+</section>
+
+<ConfirmDialog @bind-Open="_confirmRevokeAll" Title="@L["Выйти на всех устройствах?", "Sign out everywhere?"]" ConfirmText="@L["Выйти везде", "Sign out everywhere"]"
+               Message="@L["Все сеансы, включая этот, будут завершены.", "All sessions, including this one, will be ended."]" OnConfirm="RevokeAllAsync" />
+
+@code {
+    private string _displayName = string.Empty;
+    private string _timeZone = "UTC";
+    private string _locale = "ru-RU";
+    private string _currency = "RUB";
+    private DateFormatPreference _dateFormat;
+    private DayOfWeek _firstDay;
+    private bool _allowOverlaps;
+    private ApiException? _profileError;
+    private List<CategoryDto> _categories = [];
+    private List<TagDto> _tags = [];
+    private string _categoryName = string.Empty;
+    private CategoryScope _categoryScope;
+    private string _categoryColor = "#8A8D86";
+    private string _currentPassword = string.Empty;
+    private string _newPassword = string.Empty;
+    private ApiException? _passwordError;
+    private List<SessionDto> _sessions = [];
+    private bool _confirmRevokeAll;
+    private string _deletePassword = string.Empty;
+    private string _deleteConfirmation = string.Empty;
+    private ApiException? _deleteError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (User.Profile is { } p)
+        {
+            _displayName = p.DisplayName;
+            _timeZone = p.TimeZoneId;
+            _locale = p.Locale;
+            _currency = p.CurrencyCode;
+            _dateFormat = p.DateFormat;
+            _firstDay = p.FirstDayOfWeek;
+            _allowOverlaps = p.AllowOverlappingTimeBlocks;
+        }
+
+        await LoadOrganizationAsync();
+        await LoadSessionsAsync();
+    }
+
+    private async Task LoadOrganizationAsync()
+    {
+        _categories = await Api.GetAsync<List<CategoryDto>>("/api/v1/categories");
+        _tags = await Api.GetAsync<List<TagDto>>("/api/v1/tags");
+    }
+
+    private async Task LoadSessionsAsync() => _sessions = await Api.GetAsync<List<SessionDto>>("/api/v1/account/sessions");
+
+    private async Task SaveProfileAsync()
+    {
+        _profileError = null;
+        try
+        {
+            var saved = await Api.PutAsync<ProfileDto>("/api/v1/profile", new UpdateProfileRequest(
+                _displayName, _timeZone, _locale, _currency, _dateFormat, _firstDay, _allowOverlaps, User.Profile!.Version));
+            User.Set(saved);
+            Toasts.Success(L["Настройки сохранены", "Settings saved"]);
+        }
+        catch (ApiException ex)
+        {
+            _profileError = ex.IsConflict ? new ApiException(ex.Status, ex.Code, L["Настройки изменены в другом окне. Обновите страницу.", "Settings were changed in another window. Reload the page."]) : ex;
+        }
+    }
+
+    private async Task AddCategoryAsync()
+    {
+        try
+        {
+            await Api.PostAsync<CategoryDto>("/api/v1/categories", new CreateCategoryRequest(_categoryScope, _categoryName, _categoryColor.ToUpperInvariant()));
+            _categoryName = string.Empty;
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Code == "duplicate" ? L["Такая категория уже есть.", "This category already exists."] : ex.Message);
+        }
+
+        await LoadOrganizationAsync();
+    }
+
+    private async Task DeleteCategoryAsync(CategoryDto category)
+    {
+        await Api.DeleteAsync($"/api/v1/categories/{category.Id}");
+        await LoadOrganizationAsync();
+    }
+
+    private async Task DeleteTagAsync(TagDto tag)
+    {
+        await Api.DeleteAsync($"/api/v1/tags/{tag.Id}");
+        await LoadOrganizationAsync();
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        _passwordError = null;
+        try
+        {
+            await Api.PostAsync("/api/v1/account/change-password", new ChangePasswordRequest(_currentPassword, _newPassword));
+            _currentPassword = _newPassword = string.Empty;
+            Toasts.Success(L["Пароль изменён. Остальные сеансы завершены.", "Password changed. Other sessions were signed out."]);
+            await LoadSessionsAsync();
+        }
+        catch (ApiException ex)
+        {
+            _passwordError = ex;
+        }
+    }
+
+    private async Task RevokeAsync(SessionDto session)
+    {
+        await Api.DeleteAsync($"/api/v1/account/sessions/{session.Id}");
+        if (session.IsCurrent)
+        {
+            Session.Clear();
+            return;
+        }
+
+        await LoadSessionsAsync();
+    }
+
+    private async Task RevokeAllAsync()
+    {
+        await Api.PostAsync("/api/v1/account/sessions/revoke-all", null);
+        Session.Clear();
+    }
+
+    private async Task DeleteAccountAsync()
+    {
+        _deleteError = null;
+        try
+        {
+            await Api.PostAsync("/api/v1/account/delete", new DeleteAccountRequest(_deletePassword, _deleteConfirmation));
+            Session.Clear();
+        }
+        catch (ApiException ex)
+        {
+            _deleteError = ex;
+        }
+    }
+
+    private static string DeviceName(string userAgent) =>
+        userAgent.Contains("Firefox", StringComparison.Ordinal) ? "Firefox"
+        : userAgent.Contains("Edg/", StringComparison.Ordinal) ? "Edge"
+        : userAgent.Contains("Chrome", StringComparison.Ordinal) ? "Chrome"
+        : userAgent.Contains("Safari", StringComparison.Ordinal) ? "Safari"
+        : userAgent.Length > 40 ? userAgent[..40] : userAgent;
+}

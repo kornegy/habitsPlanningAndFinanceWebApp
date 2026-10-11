@@ -1,0 +1,80 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@layout AuthLayout
+@using PersonalPlatform.Contracts.Auth
+@inject ApiClient Api
+@inject AuthSession Session
+@inject NavigationManager Navigation
+
+<PageTitle>@L["Вход", "Sign in"]</PageTitle>
+<h1>@L["Вход", "Sign in"]</h1>
+
+<form @onsubmit="SubmitAsync" class="stack">
+    <label class="field">
+        <span>Email</span>
+        <input type="email" @bind="_email" autocomplete="username" required maxlength="254" />
+    </label>
+    <label class="field">
+        <span>@L["Пароль", "Password"]</span>
+        <input type="password" @bind="_password" autocomplete="current-password" required maxlength="128" />
+    </label>
+    @if (_message is not null)
+    {
+        <div class="form-error" role="alert">@_message</div>
+    }
+    <button type="submit" class="button button-primary button-block" disabled="@_busy">@(_busy ? L["Входим…", "Signing in…"] : L["Войти", "Sign in"])</button>
+</form>
+<div class="auth-links">
+    <a href="forgot-password">@L["Забыли пароль?", "Forgot password?"]</a>
+    <a href="register">@L["Создать аккаунт", "Create account"]</a>
+</div>
+
+@code {
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private string? _message;
+    private bool _busy;
+
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo(SafeReturnUrl(), replace: true);
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            var response = await Api.PostAsync<AccessTokenResponse>("/api/v1/auth/login", new LoginRequest(_email.Trim(), _password));
+            _password = string.Empty;
+            Session.SignIn(response);
+            Navigation.NavigateTo(SafeReturnUrl(), replace: true);
+        }
+        catch (ApiException ex)
+        {
+            _message = ex.Code switch
+            {
+                "invalid_credentials" => L["Неверный email или пароль. После нескольких неудачных попыток вход временно блокируется.", "Wrong email or password. Sign-in is temporarily blocked after several failed attempts."],
+                "email_not_confirmed" => L["Подтвердите адрес по ссылке из письма.", "Please confirm your email address using the link we sent."],
+                "rate_limited" => L["Слишком много попыток. Попробуйте позже.", "Too many attempts. Try again later."],
+                _ => ex.Message,
+            };
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Only same-site relative paths are followed (prevents open redirects).</summary>
+    private string SafeReturnUrl() =>
+        ReturnUrl is { Length: > 1 } url && url[0] == '/' && url[1] != '/' && url[1] != '\\' && !url.Contains("://", StringComparison.Ordinal)
+            ? url.TrimStart('/')
+            : string.Empty;
+}

@@ -1,0 +1,216 @@
+@using PersonalPlatform.Contracts.Organization
+@using PersonalPlatform.Contracts.Tasks
+@inject ApiClient Api
+
+<Modal Open="Open" OpenChanged="OpenChanged" Title="@(Task is null ? L["Новая задача", "New task"] : L["Задача", "Task"])" Wide="true">
+    <ChildContent>
+        <form id="task-form" class="stack" @onsubmit="SaveAsync">
+            <label class="field"><span>@L["Название", "Title"]</span><input @bind="_title" required maxlength="200" /></label>
+            <label class="field"><span>@L["Описание", "Description"]</span><textarea @bind="_description" maxlength="4000" rows="3"></textarea></label>
+            <div class="grid-3">
+                <label class="field">
+                    <span>@L["Приоритет", "Priority"]</span>
+                    <select @bind="_priority">
+                        <option value="@TaskPriority.None">@L["Без приоритета", "None"]</option>
+                        <option value="@TaskPriority.Low">@L["Низкий", "Low"]</option>
+                        <option value="@TaskPriority.Medium">@L["Средний", "Medium"]</option>
+                        <option value="@TaskPriority.High">@L["Высокий", "High"]</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>@L["Категория", "Category"]</span>
+                    <select @bind="_categoryId">
+                        <option value="">@L["Без категории", "None"]</option>
+                        @foreach (var c in Categories)
+                        {
+                            <option value="@c.Id">@c.Name</option>
+                        }
+                    </select>
+                </label>
+                @if (!_recurring)
+                {
+                    <label class="field"><span>@L["Срок", "Due date"]</span><input type="date" @bind="_dueDate" /></label>
+                }
+            </div>
+            <div class="grid-3">
+                <label class="field"><span>@L["Время", "Time"]</span><input type="time" @bind="_dueTime" disabled="@(_dueDate is null && !_recurring)" /></label>
+                <label class="field"><span>@L["Напомнить (дата)", "Remind on"]</span><input type="date" @bind="_reminderDate" /></label>
+                <label class="field"><span>@L["Напомнить (время)", "Remind at"]</span><input type="time" @bind="_reminderTime" /></label>
+            </div>
+
+            @if (Task is null)
+            {
+                <label class="checkbox"><input type="checkbox" @bind="_recurring" /> @L["Повторяющаяся задача", "Recurring task"]</label>
+                @if (_recurring)
+                {
+                    <RecurrenceEditor @bind-Value="_recurrence" AllowDaily="true" />
+                }
+            }
+            else if (Task.SeriesId is not null)
+            {
+                <p class="muted small"><Icon Name="repeat" Size="14" /> @L["Экземпляр повторяющейся задачи. Изменения касаются только его.", "One instance of a recurring task. Changes apply to this instance only."]</p>
+            }
+
+            <fieldset class="stack">
+                <legend class="field"><span>@L["Подзадачи", "Subtasks"]</span></legend>
+                @for (var i = 0; i < _subtasks.Count; i++)
+                {
+                    var index = i;
+                    <div class="row">
+                        <input type="checkbox" @bind="_subtasks[index].IsDone" aria-label="@L["Выполнено", "Done"]" />
+                        <input class="grow" @bind="_subtasks[index].Title" maxlength="200" aria-label="@L["Подзадача", "Subtask"]" />
+                        <button type="button" class="icon-button" @onclick="() => _subtasks.RemoveAt(index)" aria-label="@L["Удалить подзадачу", "Remove subtask"]"><Icon Name="x" /></button>
+                    </div>
+                }
+                <div><button type="button" class="button button-small" @onclick="() => _subtasks.Add(new SubtaskModel())" disabled="@(_subtasks.Count >= 50)"><Icon Name="plus" Size="14" />@L["Подзадача", "Subtask"]</button></div>
+            </fieldset>
+
+            <fieldset class="stack">
+                <legend class="field"><span>@L["Теги", "Tags"]</span></legend>
+                <div class="row">
+                    @foreach (var tag in _allTags)
+                    {
+                        <label class="checkbox tag"><input type="checkbox" checked="@_tagIds.Contains(tag.Id)" @onchange="() => ToggleTag(tag.Id)" /> @tag.Name</label>
+                    }
+                </div>
+                <div class="row">
+                    <input @bind="_newTag" maxlength="40" placeholder="@L["Новый тег", "New tag"]" aria-label="@L["Новый тег", "New tag"]" />
+                    <button type="button" class="button button-small" @onclick="AddTagAsync" disabled="@string.IsNullOrWhiteSpace(_newTag)">@L["Добавить", "Add"]</button>
+                </div>
+            </fieldset>
+            <ErrorText Error="_error" />
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="button" @onclick="() => OpenChanged.InvokeAsync(false)">@L["Отмена", "Cancel"]</button>
+        <button type="submit" form="task-form" class="button button-primary" disabled="@_busy">@(_busy ? L["Сохранение…", "Saving…"] : L["Сохранить", "Save"])</button>
+    </Footer>
+</Modal>
+
+@code {
+    private string _title = string.Empty;
+    private string? _description;
+    private TaskPriority _priority;
+    private string _categoryId = string.Empty;
+    private DateOnly? _dueDate;
+    private TimeOnly? _dueTime;
+    private DateOnly? _reminderDate;
+    private TimeOnly? _reminderTime;
+    private bool _recurring;
+    private RecurrenceDto _recurrence = null!;
+    private List<SubtaskModel> _subtasks = [];
+    private HashSet<Guid> _tagIds = [];
+    private List<TagDto> _allTags = [];
+    private string _newTag = string.Empty;
+    private ApiException? _error;
+    private bool _busy;
+    private bool _wasOpen;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public TaskDto? Task { get; set; }
+    [Parameter] public DateOnly? DefaultDueDate { get; set; }
+    [Parameter] public IReadOnlyList<CategoryDto> Categories { get; set; } = [];
+    [Parameter] public IReadOnlyList<TagDto> Tags { get; set; } = [];
+    [Parameter] public EventCallback<TaskDto> OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            Reset();
+        }
+
+        _wasOpen = Open;
+    }
+
+    private void Reset()
+    {
+        _error = null;
+        _allTags = Tags.ToList();
+        _title = Task?.Title ?? string.Empty;
+        _description = Task?.Description;
+        _priority = Task?.Priority ?? TaskPriority.None;
+        _categoryId = Task?.CategoryId?.ToString() ?? string.Empty;
+        _dueDate = Task is null ? DefaultDueDate : Task.DueDate;
+        _dueTime = Task?.DueTime;
+        _reminderDate = Task?.ReminderAt is { } r ? L.LocalDate(r) : null;
+        _reminderTime = Task?.ReminderAt is { } rt ? TimeOnly.FromDateTime(L.ToLocal(rt).DateTime) : null;
+        _recurring = false;
+        _recurrence = new RecurrenceDto(RecurrenceFrequency.Weekly, 1, Weekdays.None, DefaultDueDate ?? L.Today, null);
+        _subtasks = Task?.Subtasks.Select(s => new SubtaskModel { Title = s.Title, IsDone = s.IsDone }).ToList() ?? [];
+        _tagIds = Task?.Tags.Select(t => t.Id).ToHashSet() ?? [];
+        _newTag = string.Empty;
+    }
+
+    private void ToggleTag(Guid id)
+    {
+        if (!_tagIds.Remove(id))
+        {
+            _tagIds.Add(id);
+        }
+    }
+
+    private async Task AddTagAsync()
+    {
+        try
+        {
+            var tag = await Api.PostAsync<TagDto>("/api/v1/tags", new CreateTagRequest(_newTag.Trim()));
+            if (_allTags.All(t => t.Id != tag.Id))
+            {
+                _allTags.Add(tag);
+            }
+
+            _tagIds.Add(tag.Id);
+            _newTag = string.Empty;
+        }
+        catch (ApiException ex)
+        {
+            _error = ex;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            Guid? category = Guid.TryParse(_categoryId, out var c) ? c : null;
+            DateTimeOffset? reminder = _reminderDate is { } rd ? L.ToInstant(rd, _reminderTime ?? new TimeOnly(9, 0)) : null;
+            var subtasks = _subtasks.Where(s => !string.IsNullOrWhiteSpace(s.Title)).Select(s => new SubtaskInput(s.Title.Trim(), s.IsDone)).ToList();
+            TaskDto saved;
+            if (Task is null)
+            {
+                saved = await Api.PostAsync<TaskDto>("/api/v1/tasks", new CreateTaskRequest(
+                    _title, _description, _priority, _recurring ? null : _dueDate, _dueTime, reminder, category, _tagIds.ToList(), subtasks,
+                    _recurring ? _recurrence : null));
+            }
+            else
+            {
+                saved = await Api.PutAsync<TaskDto>($"/api/v1/tasks/{Task.Id}", new UpdateTaskRequest(
+                    _title, _description, _priority, _dueDate, _dueDate is null ? null : _dueTime, reminder, category, _tagIds.ToList(), subtasks, Task.Version));
+            }
+
+            await OnSaved.InvokeAsync(saved);
+            await OpenChanged.InvokeAsync(false);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.IsConflict && ex.Code == "concurrency_conflict"
+                ? new ApiException(ex.Status, ex.Code, L["Задача была изменена в другом месте. Закройте окно и откройте её снова.", "The task was changed elsewhere. Close and reopen it."])
+                : ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class SubtaskModel
+    {
+        public string Title { get; set; } = string.Empty;
+
+        public bool IsDone { get; set; }
+    }
+}

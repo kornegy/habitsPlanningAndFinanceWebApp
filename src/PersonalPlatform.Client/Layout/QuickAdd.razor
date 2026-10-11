@@ -1,0 +1,80 @@
+@using PersonalPlatform.Contracts.Tasks
+@inject ApiClient Api
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+@inject AppEvents Events
+
+<div class="popover-anchor">
+    <button type="button" class="button button-primary" aria-haspopup="true" aria-expanded="@_menu" @onclick="() => _menu = !_menu">
+        <Icon Name="plus" /><span class="hide-mobile">@L["Добавить", "Add"]</span>
+    </button>
+    @if (_menu)
+    {
+        <div class="popover popover-menu" role="menu">
+            <button type="button" class="menu-item" role="menuitem" @onclick="OpenTask"><Icon Name="tasks" />@L["Задача", "Task"]</button>
+            <button type="button" class="menu-item" role="menuitem" @onclick='() => Go("notes?new=1")'><Icon Name="note" />@L["Заметка", "Note"]</button>
+            <button type="button" class="menu-item" role="menuitem" @onclick='() => Go("finance/transactions?new=expense")'><Icon Name="wallet" />@L["Расход", "Expense"]</button>
+            <button type="button" class="menu-item" role="menuitem" @onclick='() => Go("habits?new=1")'><Icon Name="habits" />@L["Привычка", "Habit"]</button>
+        </div>
+    }
+</div>
+
+<Modal @bind-Open="_taskOpen" Title="@L["Новая задача", "New task"]">
+    <ChildContent>
+        <form id="quick-task" @onsubmit="CreateTaskAsync">
+            <label class="field">
+                <span>@L["Название", "Title"]</span>
+                <input @bind="_title" maxlength="200" required autocomplete="off" />
+            </label>
+            <label class="checkbox"><input type="checkbox" @bind="_today" /> @L["На сегодня", "Due today"]</label>
+            <ErrorText Error="_error" />
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="button" @onclick="() => _taskOpen = false">@L["Отмена", "Cancel"]</button>
+        <button type="submit" form="quick-task" class="button button-primary" disabled="@_busy">@L["Создать", "Create"]</button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _menu;
+    private bool _taskOpen;
+    private bool _busy;
+    private bool _today = true;
+    private string _title = string.Empty;
+    private ApiException? _error;
+
+    private void OpenTask()
+    {
+        _menu = false;
+        _title = string.Empty;
+        _error = null;
+        _taskOpen = true;
+    }
+
+    private void Go(string url)
+    {
+        _menu = false;
+        Navigation.NavigateTo(url);
+    }
+
+    private async Task CreateTaskAsync()
+    {
+        _busy = true;
+        try
+        {
+            await Api.PostAsync<TaskDto>("/api/v1/tasks", new CreateTaskRequest(_title, null, TaskPriority.None, _today ? L.Today : null, null, null, null, null, null, null));
+            _taskOpen = false;
+            Toasts.Success(L["Задача создана", "Task created"]);
+            Events.RaiseDataChanged();
+        }
+        catch (ApiException ex)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

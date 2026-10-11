@@ -1,0 +1,185 @@
+@using PersonalPlatform.Contracts.Finance
+@inject ApiClient Api
+
+<Modal Open="Open" OpenChanged="OpenChanged" Title="@TitleText">
+    <ChildContent>
+        <form id="tx-form" class="stack" @onsubmit="SaveAsync">
+            @if (Transaction is null)
+            {
+                <div class="tabs" role="tablist">
+                    <button type="button" role="tab" class="tab" aria-selected="@(_kind == TransactionKind.Expense ? "true" : "false")" @onclick="() => _kind = TransactionKind.Expense">@L["Расход", "Expense"]</button>
+                    <button type="button" role="tab" class="tab" aria-selected="@(_kind == TransactionKind.Income ? "true" : "false")" @onclick="() => _kind = TransactionKind.Income">@L["Доход", "Income"]</button>
+                    <button type="button" role="tab" class="tab" aria-selected="@(_kind == TransactionKind.Transfer ? "true" : "false")" @onclick="() => _kind = TransactionKind.Transfer">@L["Перевод", "Transfer"]</button>
+                </div>
+            }
+            <div class="grid-2">
+                <label class="field">
+                    <span>@(_kind == TransactionKind.Transfer ? L["Со счёта", "From account"] : L["Счёт", "Account"])</span>
+                    <select @bind="_accountId" required>
+                        <option value="">—</option>
+                        @foreach (var a in Accounts.Where(a => !a.IsArchived || a.Id.ToString() == _accountId))
+                        {
+                            <option value="@a.Id">@a.Name (@a.CurrencyCode)</option>
+                        }
+                    </select>
+                </label>
+                <label class="field">
+                    <span>@L["Сумма", "Amount"]@(Source is { } s ? $", {s.CurrencyCode}" : null)</span>
+                    <input type="number" min="0" step="@Step(Source?.CurrencyCode)" @bind="_amount" required inputmode="decimal" />
+                </label>
+            </div>
+            @if (_kind == TransactionKind.Transfer)
+            {
+                <div class="grid-2">
+                    <label class="field">
+                        <span>@L["На счёт", "To account"]</span>
+                        <select @bind="_destinationId" required>
+                            <option value="">—</option>
+                            @foreach (var a in Accounts.Where(a => (!a.IsArchived || a.Id.ToString() == _destinationId) && a.Id.ToString() != _accountId))
+                            {
+                                <option value="@a.Id">@a.Name (@a.CurrencyCode)</option>
+                            }
+                        </select>
+                    </label>
+                    @if (Destination is { } d && Source is { } src && d.CurrencyCode != src.CurrencyCode)
+                    {
+                        <label class="field">
+                            <span>@L["Зачислено", "Credited"], @d.CurrencyCode</span>
+                            <input type="number" min="0" step="@Step(d.CurrencyCode)" @bind="_destinationAmount" required />
+                        </label>
+                    }
+                </div>
+            }
+            else
+            {
+                <label class="field">
+                    <span>@L["Категория", "Category"]</span>
+                    <select @bind="_categoryId">
+                        <option value="">@L["Без категории", "Uncategorised"]</option>
+                        @foreach (var c in Categories.Where(c => !c.IsArchived && c.Kind == (_kind == TransactionKind.Income ? CategoryKind.Income : CategoryKind.Expense)))
+                        {
+                            <option value="@c.Id">@(c.ParentId is { } p ? $"{Categories.FirstOrDefault(x => x.Id == p)?.Name} / " : null)@c.Name</option>
+                        }
+                    </select>
+                </label>
+            }
+            <div class="grid-2">
+                <label class="field"><span>@L["Дата операции", "Date"]</span><input type="date" @bind="_date" required /></label>
+                <label class="field"><span>@L["Описание", "Description"]</span><input @bind="_description" maxlength="300" /></label>
+            </div>
+            <ErrorText Error="_error" />
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="button" @onclick="() => OpenChanged.InvokeAsync(false)">@L["Отмена", "Cancel"]</button>
+        <button type="submit" form="tx-form" class="button button-primary" disabled="@_busy">@(_busy ? L["Сохранение…", "Saving…"] : L["Сохранить", "Save"])</button>
+    </Footer>
+</Modal>
+
+@code {
+    private TransactionKind _kind;
+    private string _accountId = string.Empty;
+    private string _destinationId = string.Empty;
+    private string _categoryId = string.Empty;
+    private decimal _amount;
+    private decimal? _destinationAmount;
+    private DateOnly _date;
+    private string? _description;
+    private ApiException? _error;
+    private bool _busy;
+    private bool _wasOpen;
+    private string _idempotencyKey = string.Empty;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public TransactionDto? Transaction { get; set; }
+    [Parameter] public TransactionKind DefaultKind { get; set; }
+    [Parameter] public IReadOnlyList<AccountDto> Accounts { get; set; } = [];
+    [Parameter] public IReadOnlyList<FinanceCategoryDto> Categories { get; set; } = [];
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private AccountDto? Source => Accounts.FirstOrDefault(a => a.Id.ToString() == _accountId);
+
+    private AccountDto? Destination => Accounts.FirstOrDefault(a => a.Id.ToString() == _destinationId);
+
+    private string TitleText => Transaction is not null ? L["Операция", "Transaction"] : _kind switch
+    {
+        TransactionKind.Income => L["Новый доход", "New income"],
+        TransactionKind.Transfer => L["Новый перевод", "New transfer"],
+        _ => L["Новый расход", "New expense"],
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            // One idempotency key per user intent: retries of this form never create a second operation.
+            _idempotencyKey = Guid.NewGuid().ToString("N");
+            _error = null;
+            var t = Transaction;
+            _kind = t?.Kind ?? DefaultKind;
+            _accountId = t?.AccountId.ToString() ?? Accounts.FirstOrDefault(a => !a.IsArchived)?.Id.ToString() ?? string.Empty;
+            _destinationId = t?.DestinationAccountId?.ToString() ?? string.Empty;
+            _categoryId = t?.CategoryId?.ToString() ?? string.Empty;
+            _amount = t?.Amount ?? 0m;
+            _destinationAmount = t?.DestinationAmount;
+            _date = t?.OccurredOn ?? L.Today;
+            _description = t?.Description;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private string Step(string? currency) => currency is null ? "0.01" : L.MinorUnits(currency) switch
+    {
+        0 => "1",
+        3 => "0.001",
+        _ => "0.01",
+    };
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var account = Guid.Parse(_accountId);
+            Guid? destination = _kind == TransactionKind.Transfer && Guid.TryParse(_destinationId, out var d) ? d : null;
+            Guid? category = _kind != TransactionKind.Transfer && Guid.TryParse(_categoryId, out var c) ? c : null;
+            var crossCurrency = Destination is { } dest && Source is { } src && dest.CurrencyCode != src.CurrencyCode;
+            var credited = _kind == TransactionKind.Transfer && crossCurrency ? _destinationAmount : null;
+            if (Transaction is null)
+            {
+                await Api.PostAsync<TransactionDto>("/api/v1/finance/transactions",
+                    new CreateTransactionRequest(_kind, _date, _description, account, _amount, category, destination, credited),
+                    idempotencyKey: _idempotencyKey);
+            }
+            else
+            {
+                await Api.PutAsync<TransactionDto>($"/api/v1/finance/transactions/{Transaction.Id}",
+                    new UpdateTransactionRequest(_date, _description, account, _amount, category, destination, credited, Transaction.Version));
+            }
+
+            await OnSaved.InvokeAsync();
+            await OpenChanged.InvokeAsync(false);
+        }
+        catch (FormatException)
+        {
+            _error = new ApiException(System.Net.HttpStatusCode.BadRequest, null, L["Выберите счёт.", "Choose an account."]);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Code switch
+            {
+                "concurrency_conflict" => new ApiException(ex.Status, ex.Code, L["Операция изменена в другом месте. Закройте окно и откройте снова.", "The transaction was changed elsewhere. Close and reopen it."]),
+                "invalid_amount_precision" => new ApiException(ex.Status, ex.Code, L["Слишком много знаков после запятой для этой валюты.", "Too many decimal places for this currency."]),
+                "account_archived" => new ApiException(ex.Status, ex.Code, L["Счёт в архиве.", "The account is archived."]),
+                _ => ex,
+            };
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,0 +1,53 @@
+@using PersonalPlatform.Contracts.Tasks
+<div class="stack">
+    <div class="grid-3">
+        <label class="field">
+            <span>@L["Повторять", "Repeat"]</span>
+            <select value="@Value.Frequency" @onchange="e => Update(Value with { Frequency = Enum.Parse<RecurrenceFrequency>((string)e.Value!) })">
+                @if (AllowDaily)
+                {
+                    <option value="@RecurrenceFrequency.Daily">@L["Ежедневно", "Daily"]</option>
+                }
+                <option value="@RecurrenceFrequency.Weekly">@L["Еженедельно", "Weekly"]</option>
+                <option value="@RecurrenceFrequency.Monthly">@L["Ежемесячно", "Monthly"]</option>
+                <option value="@RecurrenceFrequency.Yearly">@L["Ежегодно", "Yearly"]</option>
+            </select>
+        </label>
+        <label class="field">
+            <span>@L["Каждые N", "Every N"]</span>
+            <input type="number" min="1" max="365" value="@Value.Interval" @onchange="e => Update(Value with { Interval = int.TryParse((string?)e.Value, out var n) ? n : 1 })" />
+        </label>
+        <label class="field">
+            <span>@L["Начало", "Starts"]</span>
+            <input type="date" value="@Query.Iso(Value.StartDate)" @onchange="e => Update(Value with { StartDate = DateOnly.TryParse((string?)e.Value, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : Value.StartDate })" />
+        </label>
+    </div>
+    @if (Value.Frequency == RecurrenceFrequency.Weekly)
+    {
+        <div class="weekday-picker" role="group" aria-label="@L["Дни недели", "Weekdays"]">
+            @foreach (var (flag, ru, en) in Days)
+            {
+                <label><input type="checkbox" checked="@Value.Days.HasFlag(flag)" @onchange="() => Update(Value with { Days = Value.Days ^ flag })" /> @L[ru, en]</label>
+            }
+        </div>
+    }
+    <label class="field">
+        <span>@L["Окончание (необязательно)", "Ends (optional)"]</span>
+        <input type="date" value="@(Value.EndDate is { } end ? Query.Iso(end) : string.Empty)"
+               @onchange="e => Update(Value with { EndDate = DateOnly.TryParse((string?)e.Value, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null })" />
+    </label>
+</div>
+
+@code {
+    private static readonly (Weekdays Flag, string Ru, string En)[] Days =
+    [
+        (Weekdays.Monday, "Пн", "Mon"), (Weekdays.Tuesday, "Вт", "Tue"), (Weekdays.Wednesday, "Ср", "Wed"), (Weekdays.Thursday, "Чт", "Thu"),
+        (Weekdays.Friday, "Пт", "Fri"), (Weekdays.Saturday, "Сб", "Sat"), (Weekdays.Sunday, "Вс", "Sun"),
+    ];
+
+    [Parameter, EditorRequired] public RecurrenceDto Value { get; set; } = null!;
+    [Parameter] public EventCallback<RecurrenceDto> ValueChanged { get; set; }
+    [Parameter] public bool AllowDaily { get; set; }
+
+    private Task Update(RecurrenceDto value) => ValueChanged.InvokeAsync(value);
+}

@@ -1,0 +1,51 @@
+@page "/confirm-email"
+@attribute [AllowAnonymous]
+@layout AuthLayout
+@using PersonalPlatform.Contracts.Auth
+@inject ApiClient Api
+@inject NavigationManager Navigation
+
+<PageTitle>@L["Подтверждение email", "Confirm email"]</PageTitle>
+<h1>@L["Подтверждение email", "Confirm email"]</h1>
+@switch (_state)
+{
+    case State.Working:
+        <p role="status">@L["Проверяем ссылку…", "Checking the link…"]</p>
+        break;
+    case State.Done:
+        <p>@L["Адрес подтверждён. Теперь можно войти.", "Your address is confirmed. You can now sign in."]</p>
+        <a class="button button-primary" href="login">@L["Войти", "Sign in"]</a>
+        break;
+    default:
+        <p>@L["Ссылка недействительна или устарела.", "The link is invalid or has expired."]</p>
+        <ResendConfirmation />
+        break;
+}
+
+@code {
+    private enum State { Working, Done, Failed }
+
+    private State _state = State.Working;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Token travels in the URL fragment so it is never sent to servers or in Referer headers.
+        var link = LinkFragment.Parse(Navigation.Uri);
+        Navigation.NavigateTo("confirm-email", replace: true); // drop the token from the address bar/history
+        if (link is null)
+        {
+            _state = State.Failed;
+            return;
+        }
+
+        try
+        {
+            await Api.PostAsync("/api/v1/auth/confirm-email", new ConfirmEmailRequest(link.Value.UserId, link.Value.Token));
+            _state = State.Done;
+        }
+        catch (ApiException)
+        {
+            _state = State.Failed;
+        }
+    }
+}

@@ -1,0 +1,228 @@
+@page "/finance/recurring"
+@using PersonalPlatform.Contracts.Finance
+@using PersonalPlatform.Contracts.Tasks
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<PageTitle>@L["Регулярные операции", "Recurring"]</PageTitle>
+<div class="page-header">
+    <h1>@L["Регулярные операции", "Recurring transactions"]</h1>
+    <button type="button" class="button button-primary" @onclick="() => Open(null)"><Icon Name="plus" />@L["Шаблон", "Template"]</button>
+</div>
+<FinanceTabs />
+<p class="muted">@L["Операции по шаблону создаются автоматически при открытии раздела финансов, когда наступает дата.", "Operations are created from templates automatically when you open the finance section and the date has come."]</p>
+
+@if (_items is null)
+{
+    <Skeleton Lines="4" />
+}
+else if (_items.Count == 0)
+{
+    <EmptyState IconName="repeat" Title="@L["Шаблонов нет", "No templates"]" Text="@L["Например: аренда каждый месяц или зарплата.", "For example: monthly rent or salary."]" />
+}
+else
+{
+    <ul class="list">
+        @foreach (var item in _items)
+        {
+            <li class="list-item" @key="item.Id">
+                <div class="list-main">
+                    <div class="list-title">@(item.Description ?? item.AccountName) · <span class="num">@L.Money(item.Amount, item.CurrencyCode)</span></div>
+                    <div class="list-meta">
+                        <span>@FrequencyText(item.Schedule)</span>
+                        <span>@item.AccountName</span>
+                        @if (item.IsPaused)
+                        {
+                            <span class="tag">@L["на паузе", "paused"]</span>
+                        }
+                        else if (item.NextOccurrence is { } next)
+                        {
+                            <span>@L["Следующая: ", "Next: "]@L.Date(next)</span>
+                        }
+                        else
+                        {
+                            <span>@L["Завершено", "Finished"]</span>
+                        }
+                    </div>
+                </div>
+                <button type="button" class="button button-small" @onclick="() => PauseAsync(item)">@(item.IsPaused ? L["Продолжить", "Resume"] : L["Пауза", "Pause"])</button>
+                <button type="button" class="icon-button" @onclick="() => Open(item)" aria-label="@L["Изменить", "Edit"]"><Icon Name="edit" /></button>
+                <button type="button" class="icon-button" @onclick="() => _deleting = item" aria-label="@L["Удалить", "Delete"]"><Icon Name="trash" /></button>
+            </li>
+        }
+    </ul>
+}
+
+<Modal @bind-Open="_editorOpen" Title="@L["Шаблон операции", "Template"]">
+    <ChildContent>
+        <form id="rec-form" class="stack" @onsubmit="SaveAsync">
+            <div class="grid-2">
+                <label class="field">
+                    <span>@L["Тип", "Type"]</span>
+                    <select @bind="_kind" disabled="@(_editing is not null)">
+                        <option value="@TransactionKind.Expense">@L["Расход", "Expense"]</option>
+                        <option value="@TransactionKind.Income">@L["Доход", "Income"]</option>
+                        <option value="@TransactionKind.Transfer">@L["Перевод", "Transfer"]</option>
+                    </select>
+                </label>
+                <label class="field"><span>@L["Сумма", "Amount"]</span><input type="number" min="0" step="any" @bind="_amount" required /></label>
+            </div>
+            <div class="grid-2">
+                <label class="field">
+                    <span>@L["Счёт", "Account"]</span>
+                    <select @bind="_accountId" required>
+                        <option value="">—</option>
+                        @foreach (var a in _accounts.Where(a => !a.IsArchived))
+                        {
+                            <option value="@a.Id">@a.Name (@a.CurrencyCode)</option>
+                        }
+                    </select>
+                </label>
+                @if (_kind == TransactionKind.Transfer)
+                {
+                    <label class="field">
+                        <span>@L["На счёт", "To account"]</span>
+                        <select @bind="_destinationId" required>
+                            <option value="">—</option>
+                            @foreach (var a in _accounts.Where(a => !a.IsArchived && a.Id.ToString() != _accountId))
+                            {
+                                <option value="@a.Id">@a.Name (@a.CurrencyCode)</option>
+                            }
+                        </select>
+                    </label>
+                }
+                else
+                {
+                    <label class="field">
+                        <span>@L["Категория", "Category"]</span>
+                        <select @bind="_categoryId">
+                            <option value="">@L["Без категории", "Uncategorised"]</option>
+                            @foreach (var c in _categories.Where(c => !c.IsArchived && c.Kind == (_kind == TransactionKind.Income ? CategoryKind.Income : CategoryKind.Expense)))
+                            {
+                                <option value="@c.Id">@c.Name</option>
+                            }
+                        </select>
+                    </label>
+                }
+            </div>
+            <label class="field"><span>@L["Описание", "Description"]</span><input @bind="_description" maxlength="300" /></label>
+            <RecurrenceEditor @bind-Value="_schedule" />
+            <ErrorText Error="_error" />
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="button" @onclick="() => _editorOpen = false">@L["Отмена", "Cancel"]</button>
+        <button type="submit" form="rec-form" class="button button-primary">@L["Сохранить", "Save"]</button>
+    </Footer>
+</Modal>
+<ConfirmDialog Open="_deleting is not null" OpenChanged="v => { if (!v) _deleting = null; }" Title="@L["Удалить шаблон?", "Delete template?"]"
+               Message="@L["Уже созданные операции останутся.", "Operations already created are kept."]" OnConfirm="DeleteAsync" />
+
+@code {
+    private List<RecurringTransactionDto>? _items;
+    private IReadOnlyList<AccountDto> _accounts = [];
+    private IReadOnlyList<FinanceCategoryDto> _categories = [];
+    private bool _editorOpen;
+    private RecurringTransactionDto? _editing;
+    private RecurringTransactionDto? _deleting;
+    private TransactionKind _kind;
+    private decimal _amount;
+    private string _accountId = string.Empty;
+    private string _destinationId = string.Empty;
+    private string _categoryId = string.Empty;
+    private string? _description;
+    private RecurrenceDto _schedule = null!;
+    private ApiException? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _accounts = (await Api.GetAsync<AccountsOverviewDto>("/api/v1/finance/accounts")).Accounts;
+        _categories = await Api.GetAsync<List<FinanceCategoryDto>>("/api/v1/finance/categories");
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _items = await Api.GetAsync<List<RecurringTransactionDto>>("/api/v1/finance/recurring");
+
+    private void Open(RecurringTransactionDto? item)
+    {
+        _editing = item;
+        _error = null;
+        _kind = item?.Kind ?? TransactionKind.Expense;
+        _amount = item?.Amount ?? 0m;
+        _accountId = item?.AccountId.ToString() ?? _accounts.FirstOrDefault()?.Id.ToString() ?? string.Empty;
+        _destinationId = item?.DestinationAccountId?.ToString() ?? string.Empty;
+        _categoryId = item?.CategoryId?.ToString() ?? string.Empty;
+        _description = item?.Description;
+        _schedule = item?.Schedule ?? new RecurrenceDto(RecurrenceFrequency.Monthly, 1, Weekdays.None, L.Today, null);
+        _editorOpen = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        try
+        {
+            Guid.TryParse(_accountId, out var account);
+            Guid? destination = _kind == TransactionKind.Transfer && Guid.TryParse(_destinationId, out var d) ? d : null;
+            Guid? category = _kind != TransactionKind.Transfer && Guid.TryParse(_categoryId, out var c) ? c : null;
+            var request = new SaveRecurringTransactionRequest(_kind, account, _amount, category, destination, null, _description, _schedule, _editing?.Version);
+            if (_editing is null)
+            {
+                await Api.PostAsync<RecurringTransactionDto>("/api/v1/finance/recurring", request);
+                await Api.PostAsync<PostDueResult>("/api/v1/finance/recurring/post-due", null);
+            }
+            else
+            {
+                await Api.PutAsync<RecurringTransactionDto>($"/api/v1/finance/recurring/{_editing.Id}", request);
+            }
+
+            _editorOpen = false;
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _error = ex;
+        }
+    }
+
+    private async Task PauseAsync(RecurringTransactionDto item)
+    {
+        try
+        {
+            await Api.PostAsync<RecurringTransactionDto>($"/api/v1/finance/recurring/{item.Id}/pause", new SetPausedRequest(!item.IsPaused));
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        var item = _deleting!;
+        _deleting = null;
+        try
+        {
+            await Api.DeleteAsync($"/api/v1/finance/recurring/{item.Id}");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+
+    private string FrequencyText(RecurrenceDto s) => (s.Frequency, s.Interval) switch
+    {
+        (RecurrenceFrequency.Weekly, 1) => L["Каждую неделю", "Weekly"],
+        (RecurrenceFrequency.Monthly, 1) => L["Каждый месяц", "Monthly"],
+        (RecurrenceFrequency.Yearly, 1) => L["Каждый год", "Yearly"],
+        (RecurrenceFrequency.Weekly, var n) => L[$"Раз в {n} нед.", $"Every {n} weeks"],
+        (RecurrenceFrequency.Monthly, var n) => L[$"Раз в {n} мес.", $"Every {n} months"],
+        (RecurrenceFrequency.Yearly, var n) => L[$"Раз в {n} г.", $"Every {n} years"],
+        _ => L["Ежедневно", "Daily"],
+    };
+}

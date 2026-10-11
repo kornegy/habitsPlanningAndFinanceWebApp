@@ -1,5 +1,21 @@
 <Router AppAssembly="typeof(App).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" />
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
+            <NotAuthorized>
+                <RedirectToLogin />
+            </NotAuthorized>
+            <Authorizing>
+                <div class="boot" role="status"><span class="boot-mark" aria-hidden="true"></span><span class="visually-hidden">@L["Загрузка…", "Loading…"]</span></div>
+            </Authorizing>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(AuthLayout)">
+            <PageTitle>@L["Страница не найдена", "Page not found"]</PageTitle>
+            <h1>@L["Страница не найдена", "Page not found"]</h1>
+            <p class="muted">@L["Такой страницы нет.", "This page does not exist."]</p>
+            <a class="button" href="">@L["На главную", "Go home"]</a>
+        </LayoutView>
+    </NotFound>
 </Router>

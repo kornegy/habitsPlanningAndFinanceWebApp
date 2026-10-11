@@ -1,0 +1,66 @@
+@page "/register"
+@attribute [AllowAnonymous]
+@layout AuthLayout
+@using PersonalPlatform.Contracts.Auth
+@inject ApiClient Api
+
+<PageTitle>@L["Регистрация", "Sign up"]</PageTitle>
+<h1>@L["Регистрация", "Create account"]</h1>
+
+@if (_done)
+{
+    <p>@L["Если адрес можно использовать, мы отправили письмо со ссылкой для подтверждения.", "If the address can be used, we have sent an email with a confirmation link."]</p>
+    <a class="button" href="login">@L["Ко входу", "Go to sign in"]</a>
+}
+else
+{
+    <form @onsubmit="SubmitAsync" class="stack">
+        <label class="field">
+            <span>@L["Имя", "Name"]</span>
+            <input @bind="_name" autocomplete="name" maxlength="80" />
+        </label>
+        <label class="field">
+            <span>Email</span>
+            <input type="email" @bind="_email" autocomplete="email" required maxlength="254" />
+        </label>
+        <label class="field">
+            <span>@L["Пароль", "Password"]</span>
+            <input type="password" @bind="_password" autocomplete="new-password" required minlength="@PasswordPolicy.MinLength" maxlength="@PasswordPolicy.MaxLength" aria-describedby="pw-hint" />
+            <small id="pw-hint" class="muted">@L[$"Не короче {PasswordPolicy.MinLength} символов. Удобно использовать фразу из нескольких слов.", $"At least {PasswordPolicy.MinLength} characters. A phrase of several words works well."]</small>
+        </label>
+        <ErrorText Error="_error" />
+        <button type="submit" class="button button-primary button-block" disabled="@_busy">@L["Создать аккаунт", "Create account"]</button>
+    </form>
+    <div class="auth-links"><a href="login">@L["Уже есть аккаунт? Войти", "Already have an account? Sign in"]</a></div>
+}
+
+@code {
+    private string _name = string.Empty;
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private ApiException? _error;
+    private bool _busy;
+    private bool _done;
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var timeZone = TimeZoneInfo.Local.HasIanaId ? TimeZoneInfo.Local.Id : null;
+            await Api.PostAsync<AcceptedResponse>("/api/v1/auth/register",
+                new RegisterRequest(_email.Trim(), _password, _name.Trim(), timeZone, L.IsEnglish ? "en-US" : "ru-RU"));
+            _password = string.Empty;
+            _done = true;
+        }
+        catch (ApiException ex)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

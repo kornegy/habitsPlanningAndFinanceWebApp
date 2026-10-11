@@ -1,0 +1,327 @@
+@implements IAsyncDisposable
+@using PersonalPlatform.Contracts.Notes
+@using PersonalPlatform.Contracts.Organization
+@inject ApiClient Api
+@inject DraftStore Drafts
+@inject ToastService Toasts
+
+@if (_note is null)
+{
+    <Skeleton Lines="8" />
+}
+else
+{
+    @if (_conflict)
+    {
+        <div class="banner warning" role="alert">
+            <span>@L["Заметка изменена в другом окне или на другом устройстве.", "This note was changed in another window or device."]</span>
+            <div class="row">
+                <button type="button" class="button button-small" @onclick="TakeServerVersionAsync">@L["Загрузить их версию", "Load their version"]</button>
+                <button type="button" class="button button-small" @onclick="OverwriteAsync">@L["Сохранить мою", "Keep mine"]</button>
+            </div>
+        </div>
+    }
+    @if (_restorableDraft)
+    {
+        <div class="banner" role="status">
+            <span>@L["Есть несохранённые изменения этой заметки.", "There are unsaved changes for this note."]</span>
+            <div class="row">
+                <button type="button" class="button button-small" @onclick="RestoreDraft">@L["Восстановить", "Restore"]</button>
+                <button type="button" class="link-button" @onclick="DiscardDraft">@L["Отбросить", "Discard"]</button>
+            </div>
+        </div>
+    }
+
+    <div class="row-between">
+        <span class="status-pill @(_state == SaveState.Error ? "error" : _state == SaveState.Saved ? "ok" : null)" role="status" aria-live="polite">@StateText</span>
+        <div class="row">
+            <button type="button" class="icon-button" aria-pressed="@(_note.IsPinned ? "true" : "false")" @onclick="TogglePinAsync" aria-label="@(_note.IsPinned ? L["Открепить", "Unpin"] : L["Закрепить", "Pin"])"><Icon Name="pin" /></button>
+            <button type="button" class="icon-button" @onclick="ShowHistoryAsync" aria-label="@L["История изменений", "History"]"><Icon Name="clock" /></button>
+            <button type="button" class="icon-button" @onclick="ToggleArchiveAsync" aria-label="@(_note.IsArchived ? L["Вернуть из архива", "Restore"] : L["В архив", "Archive"])"><Icon Name="archive" /></button>
+            <button type="button" class="icon-button" @onclick="() => _confirmDelete = true" aria-label="@L["Удалить", "Delete"]"><Icon Name="trash" /></button>
+        </div>
+    </div>
+
+    <input class="note-title-input" @bind="_title" @bind:event="oninput" @bind:after="OnEdited" maxlength="200" placeholder="@L["Заголовок", "Title"]" aria-label="@L["Заголовок", "Title"]" />
+    <div class="row">
+        @foreach (var tag in Tags)
+        {
+            <label class="checkbox tag"><input type="checkbox" checked="@_tagIds.Contains(tag.Id)" @onchange="() => ToggleTag(tag.Id)" /> @tag.Name</label>
+        }
+        <input class="button-small" @bind="_newTag" maxlength="40" placeholder="@L["+ тег", "+ tag"]" aria-label="@L["Новый тег", "New tag"]" @onkeydown="TagKeyAsync" />
+    </div>
+    <textarea class="note-body" @bind="_content" @bind:event="oninput" @bind:after="OnEdited" maxlength="100000" placeholder="@L["Текст заметки", "Write something"]" aria-label="@L["Текст заметки", "Note text"]"></textarea>
+}
+
+<Modal @bind-Open="_historyOpen" Title="@L["История изменений", "History"]" Wide="true">
+    <ChildContent>
+        @if (_revisions.Count == 0)
+        {
+            <p class="muted">@L["Предыдущих версий нет.", "No earlier versions."]</p>
+        }
+        <ul class="list">
+            @foreach (var revision in _revisions)
+            {
+                <li class="list-item">
+                    <div class="list-main">
+                        <div class="list-meta">@L.DateTime(revision.CreatedAt)</div>
+                        <strong>@revision.Title</strong>
+                        <div class="note-snippet">@revision.Content</div>
+                    </div>
+                    <button type="button" class="button button-small" @onclick="() => RestoreRevision(revision)">@L["Вернуть", "Restore"]</button>
+                </li>
+            }
+        </ul>
+    </ChildContent>
+</Modal>
+<ConfirmDialog @bind-Open="_confirmDelete" Title="@L["Удалить заметку?", "Delete note?"]" Message="@L["Заметка и её история будут удалены навсегда.", "The note and its history will be deleted permanently."]" OnConfirm="DeleteAsync" />
+
+@code {
+    private enum SaveState { Saved, Unsaved, Saving, Error }
+
+    private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(800);
+
+    private NoteDto? _note;
+    private string _title = string.Empty;
+    private string _content = string.Empty;
+    private HashSet<Guid> _tagIds = [];
+    private string _newTag = string.Empty;
+    private SaveState _state = SaveState.Saved;
+    private bool _conflict;
+    private bool _restorableDraft;
+    private bool _historyOpen;
+    private bool _confirmDelete;
+    private List<NoteRevisionDto> _revisions = [];
+    private CancellationTokenSource? _pending;
+    private Task _saving = Task.CompletedTask;
+    private bool _dirty;
+    private bool _disposed;
+
+    [Parameter, EditorRequired] public Guid NoteId { get; set; }
+    [Parameter] public IReadOnlyList<TagDto> Tags { get; set; } = [];
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnDeleted { get; set; }
+    [Parameter] public EventCallback<TagDto> OnTagCreated { get; set; }
+
+    private string DraftKey => $"note:{NoteId}";
+
+    private string StateText => _state switch
+    {
+        SaveState.Saving => L["Сохранение…", "Saving…"],
+        SaveState.Unsaved => L["Есть несохранённые изменения", "Unsaved changes"],
+        SaveState.Error => _conflict ? L["Не сохранено: конфликт версий", "Not saved: version conflict"] : L["Не сохранено. Повторим при следующем изменении.", "Not saved. Will retry on the next change."],
+        _ => L["Сохранено", "Saved"],
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Apply(await Api.GetAsync<NoteDto>($"/api/v1/notes/{NoteId}"));
+            _restorableDraft = Drafts.TryGet(DraftKey, out var draft) && (draft.Title != _title || draft.Content != _content);
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.IsNotFound ? L["Заметка не найдена", "Note not found"] : ex.Message);
+        }
+    }
+
+    private void Apply(NoteDto note)
+    {
+        _note = note;
+        _title = note.Title;
+        _content = note.Content;
+        _tagIds = note.Tags.Select(t => t.Id).ToHashSet();
+    }
+
+    private void OnEdited()
+    {
+        _dirty = true;
+        _state = SaveState.Unsaved;
+        Drafts.Set(DraftKey, _title, _content);
+        ScheduleSave();
+    }
+
+    private void ScheduleSave()
+    {
+        _pending?.Cancel();
+        _pending = new CancellationTokenSource();
+        var token = _pending.Token;
+        _ = Task.Delay(Debounce, token).ContinueWith(
+            t =>
+            {
+                if (!t.IsCanceled)
+                {
+                    _ = InvokeAsync(SaveQueuedAsync);
+                }
+            },
+            TaskScheduler.Default);
+    }
+
+    /// <summary>Saves are never concurrent: a new save waits for the previous one, then sends the latest text.</summary>
+    private async Task SaveQueuedAsync()
+    {
+        await _saving;
+        if (!_dirty || _conflict || _note is null)
+        {
+            return;
+        }
+
+        _saving = SaveAsync(_note.Version);
+        await _saving;
+    }
+
+    private async Task SaveAsync(uint version)
+    {
+        _dirty = false;
+        _state = SaveState.Saving;
+        Refresh();
+        try
+        {
+            var saved = await Api.PutAsync<NoteDto>($"/api/v1/notes/{NoteId}", new UpdateNoteRequest(_title, _content, _tagIds.ToList(), version));
+            _note = saved;
+            if (!_dirty)
+            {
+                _state = SaveState.Saved; // shown only after the server confirmed the save
+                Drafts.Remove(DraftKey);
+            }
+
+            await OnChanged.InvokeAsync();
+        }
+        catch (ApiException ex) when (ex.IsConflict && ex.Code == "concurrency_conflict")
+        {
+            _conflict = true;
+            _state = SaveState.Error;
+        }
+        catch (ApiException)
+        {
+            _dirty = true; // keep the text; the next edit (or the retry button) saves again
+            _state = SaveState.Error;
+        }
+
+        Refresh();
+    }
+
+    private void Refresh()
+    {
+        if (!_disposed)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task TakeServerVersionAsync()
+    {
+        Apply(await Api.GetAsync<NoteDto>($"/api/v1/notes/{NoteId}"));
+        Drafts.Remove(DraftKey);
+        _conflict = false;
+        _dirty = false;
+        _state = SaveState.Saved;
+    }
+
+    private async Task OverwriteAsync()
+    {
+        var latest = await Api.GetAsync<NoteDto>($"/api/v1/notes/{NoteId}");
+        _conflict = false;
+        _dirty = true;
+        await SaveAsync(latest.Version);
+    }
+
+    private void RestoreDraft()
+    {
+        if (Drafts.TryGet(DraftKey, out var draft))
+        {
+            _title = draft.Title ?? string.Empty;
+            _content = draft.Content;
+            _restorableDraft = false;
+            OnEdited();
+        }
+    }
+
+    private void DiscardDraft()
+    {
+        Drafts.Remove(DraftKey);
+        _restorableDraft = false;
+    }
+
+    private void ToggleTag(Guid id)
+    {
+        if (!_tagIds.Remove(id))
+        {
+            _tagIds.Add(id);
+        }
+
+        OnEdited();
+    }
+
+    private async Task TagKeyAsync(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter" || string.IsNullOrWhiteSpace(_newTag))
+        {
+            return;
+        }
+
+        try
+        {
+            var tag = await Api.PostAsync<TagDto>("/api/v1/tags", new CreateTagRequest(_newTag.Trim()));
+            await OnTagCreated.InvokeAsync(tag);
+            _newTag = string.Empty;
+            _tagIds.Add(tag.Id);
+            OnEdited();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+    }
+
+    private async Task TogglePinAsync()
+    {
+        await _saving;
+        _note = await Api.PostAsync<NoteDto>($"/api/v1/notes/{NoteId}/pin", new SetPinnedRequest(!_note!.IsPinned));
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ToggleArchiveAsync()
+    {
+        await _saving;
+        _note = await Api.PostAsync<NoteDto>($"/api/v1/notes/{NoteId}/archive", new SetArchivedRequest(!_note!.IsArchived));
+        Toasts.Info(_note.IsArchived ? L["Заметка в архиве", "Note archived"] : L["Заметка восстановлена", "Note restored"]);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ShowHistoryAsync()
+    {
+        _revisions = await Api.GetAsync<List<NoteRevisionDto>>($"/api/v1/notes/{NoteId}/revisions");
+        _historyOpen = true;
+    }
+
+    private void RestoreRevision(NoteRevisionDto revision)
+    {
+        _title = revision.Title;
+        _content = revision.Content;
+        _historyOpen = false;
+        OnEdited();
+    }
+
+    private async Task DeleteAsync()
+    {
+        _pending?.Cancel();
+        await Api.DeleteAsync($"/api/v1/notes/{NoteId}");
+        Drafts.Remove(DraftKey);
+        await OnDeleted.InvokeAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        _pending?.Cancel();
+        // Leaving the note: flush pending changes; if that fails the text stays in the in-memory draft store.
+        if (_dirty && !_conflict && _note is not null)
+        {
+            await SaveAsync(_note.Version);
+        }
+
+        _pending?.Dispose();
+    }
+}

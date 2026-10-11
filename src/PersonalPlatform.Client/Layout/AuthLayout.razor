@@ -1,0 +1,18 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+<div class="auth-shell">
+    <main class="auth-card">
+        <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Personal Platform</div>
+        @Body
+    </main>
+    <button type="button" class="link-button lang-switch" @onclick="() => L.SetLanguage(!L.IsEnglish)">@L["English", "Русский"]</button>
+</div>
+<Toasts />
+
+@code {
+    protected override void OnInitialized() => L.Changed += Refresh;
+
+    public void Dispose() => L.Changed -= Refresh;
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+}

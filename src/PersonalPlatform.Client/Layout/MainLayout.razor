@@ -1,0 +1,148 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject AuthSession Session
+@inject UserContext UserContext
+@inject ApiClient Api
+@inject DraftStore Drafts
+@inject NavigationManager Navigation
+@inject ToastService Toasts
+
+@if (!Session.IsAuthenticated)
+{
+    // Not signed in: the body is the NotAuthorized content (a redirect to the sign-in page); render no app chrome.
+    @Body
+    return;
+}
+
+<a class="skip-link" href="#main">@L["Перейти к содержимому", "Skip to content"]</a>
+<div class="shell">
+    <nav class="sidebar" aria-label="@L["Основная навигация", "Main navigation"]">
+        <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Personal</div>
+        <NavItems />
+        <div class="sidebar-footer">
+            <NavLink class="nav-item" href="settings"><Icon Name="settings" />@L["Настройки", "Settings"]</NavLink>
+            <button type="button" class="nav-item" @onclick="SignOutAsync"><Icon Name="logout" />@L["Выйти", "Sign out"]</button>
+        </div>
+    </nav>
+
+    <div class="content">
+        <header class="topbar">
+            <div>
+                <div class="topbar-date">@L.DayHeading(L.Today)</div>
+            </div>
+            <div class="topbar-actions">
+                <ReminderBell />
+                <QuickAdd />
+            </div>
+        </header>
+        <main id="main" class="page" tabindex="-1">
+            @if (UserContext.Profile is null)
+            {
+                <Skeleton Lines="5" />
+            }
+            else
+            {
+                @Body
+            }
+        </main>
+    </div>
+
+    <nav class="mobile-nav" aria-label="@L["Навигация", "Navigation"]">
+        <NavLink class="mobile-item" href="" Match="NavLinkMatch.All"><Icon Name="home" /><span>@L["Главная", "Home"]</span></NavLink>
+        <NavLink class="mobile-item" href="tasks"><Icon Name="tasks" /><span>@L["Задачи", "Tasks"]</span></NavLink>
+        <NavLink class="mobile-item" href="planner"><Icon Name="calendar" /><span>@L["План", "Plan"]</span></NavLink>
+        <NavLink class="mobile-item" href="finance"><Icon Name="wallet" /><span>@L["Финансы", "Money"]</span></NavLink>
+        <button type="button" class="mobile-item" aria-expanded="@_moreOpen" @onclick="() => _moreOpen = !_moreOpen"><Icon Name="more" /><span>@L["Ещё", "More"]</span></button>
+    </nav>
+    @if (_moreOpen)
+    {
+        <div class="sheet-backdrop" @onclick="() => _moreOpen = false"></div>
+        <div class="sheet" role="menu" @onclick="() => _moreOpen = false">
+            <NavLink class="nav-item" href="habits" role="menuitem"><Icon Name="habits" />@L["Привычки", "Habits"]</NavLink>
+            <NavLink class="nav-item" href="notes" role="menuitem"><Icon Name="note" />@L["Заметки", "Notes"]</NavLink>
+            <NavLink class="nav-item" href="journal" role="menuitem"><Icon Name="book" />@L["Дневник", "Journal"]</NavLink>
+            <NavLink class="nav-item" href="settings" role="menuitem"><Icon Name="settings" />@L["Настройки", "Settings"]</NavLink>
+            <button type="button" class="nav-item" role="menuitem" @onclick="SignOutAsync"><Icon Name="logout" />@L["Выйти", "Sign out"]</button>
+        </div>
+    }
+</div>
+<Toasts />
+
+@code {
+    private bool _moreOpen;
+    private bool _loading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += OnSessionChanged;
+        L.Changed += OnLocaleChanged;
+        await EnsureProfileAsync();
+    }
+
+    /// <summary>Loads the profile once a session exists (immediately, or after it was restored on reload).</summary>
+    private async Task EnsureProfileAsync()
+    {
+        if (UserContext.Profile is not null || !Session.IsAuthenticated || _loading)
+        {
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            await UserContext.LoadAsync();
+            // Post recurring transactions that became due since the last visit (idempotent on the server).
+            _ = PostDueRecurringAsync();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+        L.Changed -= OnLocaleChanged;
+    }
+
+    private async Task PostDueRecurringAsync()
+    {
+        try
+        {
+            await Api.PostAsync<PersonalPlatform.Contracts.Finance.PostDueResult>("/api/v1/finance/recurring/post-due", null);
+        }
+        catch (ApiException)
+        {
+            // Not critical for the page; it is retried on the next visit to the finance section.
+        }
+    }
+
+    private async Task SignOutAsync()
+    {
+        await Session.SignOutAsync();
+    }
+
+    private void OnSessionChanged()
+    {
+        if (Session.IsAuthenticated)
+        {
+            _ = InvokeAsync(EnsureProfileAsync);
+        }
+        else
+        {
+            // Forget everything personal held in memory, then return to sign-in.
+            UserContext.Clear();
+            Drafts.Clear();
+            Navigation.NavigateTo("login", replace: true);
+        }
+    }
+
+    private void OnLocaleChanged() => InvokeAsync(StateHasChanged);
+}

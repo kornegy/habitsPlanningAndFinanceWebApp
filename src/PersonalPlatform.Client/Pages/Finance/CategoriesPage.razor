@@ -1,0 +1,97 @@
+@page "/finance/categories"
+@using PersonalPlatform.Contracts.Finance
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<PageTitle>@L["Категории", "Categories"]</PageTitle>
+<div class="page-header"><h1>@L["Категории", "Categories"]</h1></div>
+<FinanceTabs />
+
+<form class="toolbar" @onsubmit="CreateAsync" aria-label="@L["Новая категория", "New category"]">
+    <input class="grow" @bind="_name" maxlength="60" required placeholder="@L["Название категории", "Category name"]" aria-label="@L["Название", "Name"]" />
+    <select @bind="_kind" aria-label="@L["Тип", "Kind"]">
+        <option value="@CategoryKind.Expense">@L["Расход", "Expense"]</option>
+        <option value="@CategoryKind.Income">@L["Доход", "Income"]</option>
+    </select>
+    <select @bind="_parentId" aria-label="@L["Родитель", "Parent"]">
+        <option value="">@L["Верхний уровень", "Top level"]</option>
+        @foreach (var c in _categories.Where(c => c.ParentId is null && c.Kind == _kind))
+        {
+            <option value="@c.Id">@c.Name</option>
+        }
+    </select>
+    <button type="submit" class="button button-primary"><Icon Name="plus" />@L["Добавить", "Add"]</button>
+</form>
+
+@foreach (var kind in new[] { CategoryKind.Expense, CategoryKind.Income })
+{
+    <section class="section">
+        <h2>@(kind == CategoryKind.Expense ? L["Расходы", "Expenses"] : L["Доходы", "Income"])</h2>
+        <ul class="list">
+            @foreach (var parent in _categories.Where(c => c.Kind == kind && c.ParentId is null))
+            {
+                <CategoryRow Category="parent" OnRename="RenameAsync" OnArchive="ArchiveAsync" OnDelete="c => _deleting = c" />
+                @foreach (var child in _categories.Where(c => c.ParentId == parent.Id))
+                {
+                    <CategoryRow Category="child" Indent="true" OnRename="RenameAsync" OnArchive="ArchiveAsync" OnDelete="c => _deleting = c" />
+                }
+            }
+        </ul>
+    </section>
+}
+
+<ConfirmDialog Open="_deleting is not null" OpenChanged="v => { if (!v) _deleting = null; }" Title="@L["Удалить категорию?", "Delete category?"]"
+               Message="@L["Операции останутся без категории, бюджеты этой категории будут удалены.", "Its transactions become uncategorised and its budgets are deleted."]" OnConfirm="DeleteAsync" />
+
+@code {
+    private List<FinanceCategoryDto> _categories = [];
+    private string _name = string.Empty;
+    private CategoryKind _kind;
+    private string _parentId = string.Empty;
+    private FinanceCategoryDto? _deleting;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync() => _categories = await Api.GetAsync<List<FinanceCategoryDto>>("/api/v1/finance/categories");
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Code switch
+            {
+                "duplicate" => L["Такая категория уже есть.", "This category already exists."],
+                "category_has_children" => L["Сначала удалите или перенесите подкатегории.", "Delete or move the subcategories first."],
+                _ => ex.Message,
+            });
+        }
+
+        await LoadAsync();
+    }
+
+    private Task CreateAsync() => RunAsync(async () =>
+    {
+        Guid? parent = Guid.TryParse(_parentId, out var p) ? p : null;
+        await Api.PostAsync<FinanceCategoryDto>("/api/v1/finance/categories", new CreateFinanceCategoryRequest(_name, _kind, parent));
+        _name = string.Empty;
+    });
+
+    private Task RenameAsync((FinanceCategoryDto Category, string Name) change) =>
+        RunAsync(() => Api.PutAsync<FinanceCategoryDto>($"/api/v1/finance/categories/{change.Category.Id}",
+            new UpdateFinanceCategoryRequest(change.Name, change.Category.ParentId, change.Category.IsArchived, change.Category.Version)));
+
+    private Task ArchiveAsync(FinanceCategoryDto category) =>
+        RunAsync(() => Api.PutAsync<FinanceCategoryDto>($"/api/v1/finance/categories/{category.Id}",
+            new UpdateFinanceCategoryRequest(category.Name, category.ParentId, !category.IsArchived, category.Version)));
+
+    private Task DeleteAsync()
+    {
+        var category = _deleting!;
+        _deleting = null;
+        return RunAsync(() => Api.DeleteAsync($"/api/v1/finance/categories/{category.Id}"));
+    }
+}

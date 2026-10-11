@@ -8,6 +8,19 @@ namespace PersonalPlatform.Api.Infrastructure;
 /// </summary>
 public sealed partial class RequestLoggingMiddleware(RequestDelegate next, ILogger<RequestLoggingMiddleware> logger)
 {
+    public const string RouteItemKey = "pp.route";
+
+    /// <summary>Records the matched route template; registered right after UseRouting.</summary>
+    public static Task CaptureRoute(HttpContext context, Func<Task> nextMiddleware)
+    {
+        if (context.GetEndpoint() is RouteEndpoint endpoint)
+        {
+            context.Items[RouteItemKey] = endpoint.RoutePattern.RawText;
+        }
+
+        return nextMiddleware();
+    }
+
     public async Task InvokeAsync(HttpContext context)
     {
         if (!context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
@@ -24,7 +37,10 @@ public sealed partial class RequestLoggingMiddleware(RequestDelegate next, ILogg
         finally
         {
             var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-            var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "unmatched";
+            // The exception handler clears the endpoint, so the route captured right after routing is preferred.
+            var route = context.Items[RouteItemKey] as string
+                ?? (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText
+                ?? "unmatched";
             var status = context.Response.StatusCode;
             if (status >= 500)
             {

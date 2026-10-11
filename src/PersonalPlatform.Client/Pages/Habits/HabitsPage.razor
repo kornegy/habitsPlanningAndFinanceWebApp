@@ -1,0 +1,171 @@
+@page "/habits"
+@using PersonalPlatform.Contracts.Habits
+@using PersonalPlatform.Contracts.Notes
+@using PersonalPlatform.Contracts.Organization
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<PageTitle>@L["Привычки", "Habits"]</PageTitle>
+<div class="page-header">
+    <h1>@L["Привычки", "Habits"]</h1>
+    <div class="row">
+        <label class="checkbox small"><input type="checkbox" @bind="_showArchived" @bind:after="LoadAsync" /> @L["Архив", "Archived"]</label>
+        <button type="button" class="button button-primary" @onclick="() => Edit(null)"><Icon Name="plus" />@L["Новая привычка", "New habit"]</button>
+    </div>
+</div>
+
+@if (_habits is null)
+{
+    <Skeleton Lines="5" />
+}
+else if (_habits.Count == 0)
+{
+    <EmptyState IconName="habits" Title="@L["Привычек пока нет", "No habits yet"]" Text="@L["Начните с одной небольшой ежедневной привычки.", "Start with one small daily habit."]" />
+}
+else
+{
+    <ul class="list">
+        @foreach (var habit in _habits)
+        {
+            <li class="list-item" @key="habit.Id">
+                @if (habit.IsDueToday && !habit.IsArchived)
+                {
+                    <button type="button" class="habit-check" aria-pressed="@(habit.CompletedToday ? "true" : "false")" @onclick="() => ToggleTodayAsync(habit)"
+                            aria-label="@L[$"Отметить сегодня: {habit.Name}", $"Check off today: {habit.Name}"]"><Icon Name="check" Size="16" /></button>
+                }
+                else
+                {
+                    <span class="habit-check" aria-hidden="true"></span>
+                }
+                <ColorDot Color="@habit.Color" />
+                <div class="list-main">
+                    <a class="list-title" href="habits/@habit.Id">@habit.Name</a>
+                    <div class="list-meta">
+                        <span>@ScheduleText(habit)</span>
+                        <span>@L[$"Серия {habit.CurrentStreak}", $"Streak {habit.CurrentStreak}"]</span>
+                        <span>@L[$"Рекорд {habit.LongestStreak}", $"Best {habit.LongestStreak}"]</span>
+                        @if (habit.TargetStreak is { } target)
+                        {
+                            <span>@L[$"Цель {target}", $"Goal {target}"]</span>
+                        }
+                        @if (habit.IsArchived)
+                        {
+                            <span class="tag">@L["В архиве", "Archived"]</span>
+                        }
+                    </div>
+                </div>
+                <button type="button" class="icon-button" @onclick="() => Edit(habit)" aria-label="@L["Изменить", "Edit"]"><Icon Name="edit" /></button>
+                <button type="button" class="icon-button" @onclick="() => ArchiveAsync(habit)" aria-label="@(habit.IsArchived ? L["Вернуть из архива", "Restore"] : L["В архив", "Archive"])"><Icon Name="archive" /></button>
+                <button type="button" class="icon-button" @onclick="() => _deleting = habit" aria-label="@L["Удалить", "Delete"]"><Icon Name="trash" /></button>
+            </li>
+        }
+    </ul>
+}
+
+<HabitEditor @bind-Open="_editorOpen" Habit="_editing" Categories="_categories" OnSaved="LoadAsync" />
+<ConfirmDialog Open="_deleting is not null" OpenChanged="v => { if (!v) _deleting = null; }" Title="@L["Удалить привычку?", "Delete habit?"]"
+               Message="@L["Привычка и вся история её выполнения будут удалены. Чтобы сохранить историю, используйте архив.", "The habit and its whole history will be deleted. Archive it to keep the history."]" OnConfirm="DeleteAsync" />
+
+@code {
+    private List<HabitDto>? _habits;
+    private IReadOnlyList<CategoryDto> _categories = [];
+    private bool _showArchived;
+    private bool _editorOpen;
+    private HabitDto? _editing;
+    private HabitDto? _deleting;
+
+    [SupplyParameterFromQuery(Name = "new")] public string? New { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await Api.GetAsync<List<CategoryDto>>("/api/v1/categories?scope=Habit");
+        await LoadAsync();
+        if (New is not null)
+        {
+            Edit(null);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _habits = await Api.GetAsync<List<HabitDto>>($"/api/v1/habits?includeArchived={(_showArchived ? "true" : "false")}");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+    }
+
+    private void Edit(HabitDto? habit)
+    {
+        _editing = habit;
+        _editorOpen = true;
+    }
+
+    private async Task ToggleTodayAsync(HabitDto habit)
+    {
+        var url = $"/api/v1/habits/{habit.Id}/completions/{Query.Iso(L.Today)}";
+        try
+        {
+            if (habit.CompletedToday)
+            {
+                await Api.DeleteAsync<HabitCompletionResult>(url);
+            }
+            else
+            {
+                await Api.PutAsync<HabitCompletionResult>(url, new { });
+            }
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task ArchiveAsync(HabitDto habit)
+    {
+        try
+        {
+            await Api.PostAsync<HabitDto>($"/api/v1/habits/{habit.Id}/archive", new SetArchivedRequest(!habit.IsArchived));
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        var habit = _deleting!;
+        try
+        {
+            await Api.DeleteAsync($"/api/v1/habits/{habit.Id}");
+            Toasts.Success(L["Привычка удалена", "Habit deleted"]);
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        _deleting = null;
+        await LoadAsync();
+    }
+
+    private string ScheduleText(HabitDto habit) => habit.ScheduleType switch
+    {
+        HabitScheduleType.Daily => L["Каждый день", "Every day"],
+        HabitScheduleType.EveryNDays => L[$"Раз в {habit.IntervalDays} дн.", $"Every {habit.IntervalDays} days"],
+        _ => string.Join(", ", Enum.GetValues<PersonalPlatform.Contracts.Tasks.Weekdays>()
+            .Where(d => d != PersonalPlatform.Contracts.Tasks.Weekdays.None && habit.Days.HasFlag(d))
+            .Select(d => L.Culture.DateTimeFormat.GetAbbreviatedDayName(ToDayOfWeek(d)))),
+    };
+
+    private static DayOfWeek ToDayOfWeek(PersonalPlatform.Contracts.Tasks.Weekdays day) =>
+        (DayOfWeek)((System.Numerics.BitOperations.TrailingZeroCount((int)day) + 1) % 7);
+}

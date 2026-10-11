@@ -1,0 +1,168 @@
+@page "/habits/{Id:guid}"
+@using PersonalPlatform.Contracts.Habits
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<PageTitle>@(_habit?.Name ?? L["Привычка", "Habit"])</PageTitle>
+@if (_habit is null || _history is null || _stats is null)
+{
+    <Skeleton Lines="6" />
+}
+else
+{
+    <div class="page-header">
+        <div>
+            <a href="habits" class="small"><Icon Name="chevron-left" Size="14" />@L["Привычки", "Habits"]</a>
+            <h1 class="row"><ColorDot Color="@_habit.Color" Size="14" />@_habit.Name</h1>
+            @if (!string.IsNullOrEmpty(_habit.Description))
+            {
+                <p class="muted plain-text">@_habit.Description</p>
+            }
+        </div>
+    </div>
+
+    <div class="kpis">
+        <div class="stat"><span class="stat-value">@_stats.CurrentStreak</span><span class="stat-label">@L["текущая серия", "current streak"]</span></div>
+        <div class="stat"><span class="stat-value">@_stats.LongestStreak</span><span class="stat-label">@L["лучшая серия", "best streak"]</span></div>
+        <div class="stat"><span class="stat-value">@L.Percent(_stats.CompletionRate)</span><span class="stat-label">@L["выполнение за месяц", "completion this month"]</span></div>
+        <div class="stat"><span class="stat-value">@_stats.Completed / @_stats.Scheduled</span><span class="stat-label">@L["дней выполнено", "days done"]</span></div>
+    </div>
+
+    <div class="grid-2">
+        <section class="section" aria-labelledby="calendar-title">
+            <div class="section-title">
+                <h2 id="calendar-title">@L.MonthYear(_month.Year, _month.Month)</h2>
+                <div class="row">
+                    <button type="button" class="icon-button" @onclick="() => ShiftAsync(-1)" aria-label="@L["Предыдущий месяц", "Previous month"]"><Icon Name="chevron-left" /></button>
+                    <button type="button" class="icon-button" @onclick="() => ShiftAsync(1)" disabled="@(_month.AddMonths(1) > L.Today)" aria-label="@L["Следующий месяц", "Next month"]"><Icon Name="chevron-right" /></button>
+                </div>
+            </div>
+            <div class="heatmap" role="grid" aria-label="@L["Календарь выполнения", "Completion calendar"]">
+                @for (var i = 0; i < 7; i++)
+                {
+                    <span class="heatmap-cell small" role="columnheader">@L.Culture.DateTimeFormat.GetShortestDayName((DayOfWeek)(((int)L.FirstDayOfWeek + i) % 7))</span>
+                }
+                @for (var i = 0; i < Offset; i++)
+                {
+                    <span class="heatmap-cell" aria-hidden="true"></span>
+                }
+                @for (var day = _month; day <= MonthEnd; day = day.AddDays(1))
+                {
+                    var date = day;
+                    var scheduled = _scheduled.Contains(date);
+                    var done = _completed.Contains(date);
+                    var canToggle = scheduled && date <= L.Today && !_habit.IsArchived;
+                    @if (canToggle)
+                    {
+                        <button type="button" class="heatmap-cell scheduled @(done ? "completed" : null) @(date == L.Today ? "today" : null)" aria-pressed="@(done ? "true" : "false")"
+                                aria-label="@L.Date(date)" @onclick="() => ToggleAsync(date, done)">@date.Day</button>
+                    }
+                    else
+                    {
+                        <span class="heatmap-cell @(scheduled ? "scheduled" : null) @(done ? "completed" : null) @(date == L.Today ? "today" : null)" aria-label="@L.Date(date)">@date.Day</span>
+                    }
+                }
+            </div>
+            <p class="muted small">@L["Нажмите на запланированный день, чтобы отметить или снять отметку.", "Select a scheduled day to check it off or undo."]</p>
+        </section>
+
+        <section class="section" aria-labelledby="weeks-title">
+            <h2 id="weeks-title">@L["По неделям", "By week"]</h2>
+            <table class="table">
+                <thead><tr><th>@L["Неделя", "Week"]</th><th class="right">@L["Выполнено", "Done"]</th><th>@L["Доля", "Rate"]</th></tr></thead>
+                <tbody>
+                    @foreach (var week in _stats.Weeks)
+                    {
+                        <tr>
+                            <td>@L.Date(week.PeriodStart)</td>
+                            <td class="right num">@week.Completed / @week.Scheduled</td>
+                            <td><Meter Percent="week.CompletionRate" Label="@L.Percent(week.CompletionRate)" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <h2>@L["За 12 месяцев", "Last 12 months"]</h2>
+            <table class="table">
+                <tbody>
+                    @foreach (var month in _yearStats?.Months ?? [])
+                    {
+                        <tr>
+                            <td>@L.MonthYear(month.PeriodStart.Year, month.PeriodStart.Month)</td>
+                            <td class="right num">@month.Completed / @month.Scheduled</td>
+                            <td><Meter Percent="month.CompletionRate" Label="@L.Percent(month.CompletionRate)" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    </div>
+}
+
+@code {
+    private HabitDto? _habit;
+    private HabitHistoryDto? _history;
+    private HabitStatsDto? _stats;
+    private HabitStatsDto? _yearStats;
+    private DateOnly _month;
+    private HashSet<DateOnly> _scheduled = [];
+    private HashSet<DateOnly> _completed = [];
+
+    [Parameter] public Guid Id { get; set; }
+
+    private DateOnly MonthEnd => _month.AddMonths(1).AddDays(-1);
+
+    private int Offset => ((int)_month.DayOfWeek - (int)L.FirstDayOfWeek + 7) % 7;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _month = new DateOnly(L.Today.Year, L.Today.Month, 1);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _habit = await Api.GetAsync<HabitDto>($"/api/v1/habits/{Id}");
+            var range = Query.Of(("from", _month), ("to", MonthEnd));
+            _history = await Api.GetAsync<HabitHistoryDto>($"/api/v1/habits/{Id}/history{range}");
+            _stats = await Api.GetAsync<HabitStatsDto>($"/api/v1/habits/{Id}/stats{range}");
+            _yearStats ??= await Api.GetAsync<HabitStatsDto>($"/api/v1/habits/{Id}/stats" + Query.Of(("from", _month.AddMonths(-11)), ("to", MonthEnd)));
+            _scheduled = _history.ScheduledDates.ToHashSet();
+            _completed = _history.CompletedDates.ToHashSet();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.IsNotFound ? L["Привычка не найдена", "Habit not found"] : ex.Message);
+        }
+    }
+
+    private async Task ShiftAsync(int months)
+    {
+        _month = _month.AddMonths(months);
+        await LoadAsync();
+    }
+
+    private async Task ToggleAsync(DateOnly date, bool done)
+    {
+        var url = $"/api/v1/habits/{Id}/completions/{Query.Iso(date)}";
+        try
+        {
+            if (done)
+            {
+                await Api.DeleteAsync<HabitCompletionResult>(url);
+            }
+            else
+            {
+                await Api.PutAsync<HabitCompletionResult>(url, new { });
+            }
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        _yearStats = null;
+        await LoadAsync();
+    }
+}

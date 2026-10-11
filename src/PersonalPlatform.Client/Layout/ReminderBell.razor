@@ -1,0 +1,112 @@
+@implements IAsyncDisposable
+@using PersonalPlatform.Contracts.Dashboard
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<div class="popover-anchor">
+    <button type="button" class="icon-button" aria-expanded="@_open" aria-haspopup="true" @onclick="() => _open = !_open"
+            aria-label="@(_reminders.Count == 0 ? L["Напоминания", "Reminders"] : L[$"Напоминания: {_reminders.Count}", $"Reminders: {_reminders.Count}"])">
+        <Icon Name="bell" />
+        @if (_reminders.Count > 0)
+        {
+            <span class="badge" aria-hidden="true">@_reminders.Count</span>
+        }
+    </button>
+    @if (_open)
+    {
+        <div class="popover" role="region" aria-label="@L["Напоминания", "Reminders"]">
+            @if (_reminders.Count == 0)
+            {
+                <p class="muted">@L["Напоминаний нет", "No reminders"]</p>
+            }
+            @foreach (var reminder in _reminders)
+            {
+                <div class="popover-row" @key="(reminder.Kind, reminder.Id)">
+                    <div>
+                        <div>@reminder.Title</div>
+                        <div class="muted small">@L.DateTime(reminder.DueAt)</div>
+                    </div>
+                    @if (reminder.Kind == ReminderKind.Task)
+                    {
+                        <button type="button" class="button button-small" @onclick="() => DismissAsync(reminder)">@L["Скрыть", "Dismiss"]</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="button button-small" @onclick="() => CompleteHabitAsync(reminder)">@L["Готово", "Done"]</button>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private readonly CancellationTokenSource _stop = new();
+    private IReadOnlyList<ReminderDto> _reminders = [];
+    private bool _open;
+    private HashSet<(ReminderKind, Guid)> _announced = [];
+
+    protected override void OnInitialized() => _ = PollAsync();
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        do
+        {
+            await LoadAsync();
+        }
+        while (await WaitAsync(timer));
+    }
+
+    private async Task<bool> WaitAsync(PeriodicTimer timer)
+    {
+        try
+        {
+            return await timer.WaitForNextTickAsync(_stop.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _reminders = await Api.GetAsync<List<ReminderDto>>("/api/v1/reminders", _stop.Token);
+            foreach (var r in _reminders.Where(r => _announced.Add((r.Kind, r.Id))))
+            {
+                Toasts.Info(L[$"Напоминание: {r.Title}", $"Reminder: {r.Title}"]);
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ApiException)
+        {
+            // Reminders are best-effort; the next poll retries.
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task DismissAsync(ReminderDto reminder)
+    {
+        await Api.PostAsync($"/api/v1/tasks/{reminder.Id}/dismiss-reminder", null);
+        await LoadAsync();
+    }
+
+    private async Task CompleteHabitAsync(ReminderDto reminder)
+    {
+        await Api.PutAsync<PersonalPlatform.Contracts.Habits.HabitCompletionResult>($"/api/v1/habits/{reminder.Id}/completions/{Query.Iso(L.Today)}", new { });
+        await LoadAsync();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _stop.Cancel();
+        _stop.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

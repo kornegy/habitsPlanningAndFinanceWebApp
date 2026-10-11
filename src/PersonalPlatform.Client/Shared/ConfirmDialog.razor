@@ -1,0 +1,33 @@
+@* Confirmation before destructive operations. *@
+<Modal Open="Open" OpenChanged="OpenChanged" Title="@Title">
+    <ChildContent><p>@Message</p></ChildContent>
+    <Footer>
+        <button type="button" class="button" @onclick="() => OpenChanged.InvokeAsync(false)">@L["Отмена", "Cancel"]</button>
+        <button type="button" class="button button-danger" disabled="@_busy" @onclick="ConfirmAsync">@(ConfirmText ?? L["Удалить", "Delete"])</button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _busy;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Message { get; set; } = string.Empty;
+    [Parameter] public string? ConfirmText { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    private async Task ConfirmAsync()
+    {
+        _busy = true;
+        try
+        {
+            await OnConfirm.InvokeAsync();
+            await OpenChanged.InvokeAsync(false);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

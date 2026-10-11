@@ -1,0 +1,229 @@
+@page "/"
+@implements IDisposable
+@using PersonalPlatform.Contracts.Dashboard
+@using PersonalPlatform.Contracts.Finance
+@using PersonalPlatform.Contracts.Tasks
+@inject ApiClient Api
+@inject ToastService Toasts
+@inject AppEvents Events
+
+<PageTitle>@L["Главная", "Home"]</PageTitle>
+
+@if (_data is null)
+{
+    <h1 class="visually-hidden">@L["Главная", "Home"]</h1>
+    <Skeleton Lines="6" />
+}
+else
+{
+    <h1 class="greeting">@Greeting()</h1>
+
+    <div class="kpis">
+        <div class="stat">
+            <span class="stat-value">@_data.Progress.TasksDone / @_data.Progress.TasksTotal</span>
+            <span class="stat-label">@L["задач на сегодня выполнено", "tasks due today done"]</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value">@_data.Progress.HabitsDone / @_data.Progress.HabitsTotal</span>
+            <span class="stat-label">@L["привычек отмечено", "habits checked off"]</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value">@_data.Progress.BlocksDone / @_data.Progress.BlocksTotal</span>
+            <span class="stat-label">@L["блоков плана прошло", "planned blocks passed"]</span>
+        </div>
+        @if (_data.OverdueCount > 0)
+        {
+            <a class="stat" href="tasks?view=Overdue">
+                <span class="stat-value negative"><Icon Name="alert" /> @_data.OverdueCount</span>
+                <span class="stat-label">@L["просрочено", "overdue"]</span>
+            </a>
+        }
+    </div>
+
+    <div class="dashboard-grid">
+        <div>
+            <section class="section" aria-labelledby="today-tasks">
+                <div class="section-title"><h2 id="today-tasks">@L["Задачи на сегодня", "Today's tasks"]</h2><a href="tasks?view=Today">@L["Все", "All"]</a></div>
+                @if (_data.TasksToday.Count == 0)
+                {
+                    <EmptyState IconName="tasks" Title="@L["На сегодня задач нет", "Nothing due today"]" />
+                }
+                else
+                {
+                    <ul class="list">
+                        @foreach (var task in _data.TasksToday)
+                        {
+                            <li class="list-item @(task.IsDone ? "done" : null)" @key="task.Id">
+                                <input type="checkbox" checked="@task.IsDone" @onchange="() => ToggleTaskAsync(task)" aria-label="@L[$"Выполнено: {task.Title}", $"Done: {task.Title}"]" />
+                                <div class="list-main">
+                                    <div class="list-title">@task.Title</div>
+                                    <div class="list-meta">
+                                        @if (task.IsOverdue)
+                                        {
+                                            <span class="negative">@L["Просрочено", "Overdue"] · @L.Date(task.DueDate)</span>
+                                        }
+                                        @if (task.DueTime is { } time)
+                                        {
+                                            <span>@L.Time(time)</span>
+                                        }
+                                        @if (task.Priority == TaskPriority.High)
+                                        {
+                                            <span class="priority-high"><Icon Name="flag" Size="14" /> @L["Высокий", "High"]</span>
+                                        }
+                                    </div>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            <section class="section" aria-labelledby="today-habits">
+                <div class="section-title"><h2 id="today-habits">@L["Привычки", "Habits"]</h2><a href="habits">@L["Все", "All"]</a></div>
+                @if (_data.Habits.Count == 0)
+                {
+                    <EmptyState IconName="habits" Title="@L["Сегодня привычек по плану нет", "No habits scheduled today"]" />
+                }
+                else
+                {
+                    <ul class="list">
+                        @foreach (var habit in _data.Habits)
+                        {
+                            <li class="list-item" @key="habit.Id">
+                                <button type="button" class="habit-check" aria-pressed="@(habit.Completed ? "true" : "false")" @onclick="() => ToggleHabitAsync(habit)"
+                                        aria-label="@L[$"Отметить: {habit.Name}", $"Check off: {habit.Name}"]"><Icon Name="check" Size="16" /></button>
+                                <ColorDot Color="@habit.Color" />
+                                <div class="list-main">
+                                    <div class="list-title">@habit.Name</div>
+                                    <div class="list-meta">@L[$"Серия: {habit.CurrentStreak}", $"Streak: {habit.CurrentStreak}"]@(habit.TargetStreak is { } t ? $" / {t}" : null)</div>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        </div>
+
+        <div>
+            <section class="section" aria-labelledby="upcoming">
+                <div class="section-title"><h2 id="upcoming">@L["Ближайшие блоки", "Coming up"]</h2><a href="planner">@L["План", "Plan"]</a></div>
+                @if (_data.UpcomingBlocks.Count == 0)
+                {
+                    <p class="muted">@L["Сегодня больше ничего не запланировано.", "Nothing else planned today."]</p>
+                }
+                <ul class="list">
+                    @foreach (var block in _data.UpcomingBlocks)
+                    {
+                        <li class="list-item" @key="block.Id">
+                            <span class="num nowrap">@L.Time(block.StartsAt)–@L.Time(block.EndsAt)</span>
+                            <span class="list-main list-title">@block.Title</span>
+                        </li>
+                    }
+                </ul>
+            </section>
+
+            <section class="section" aria-labelledby="month-money">
+                <div class="section-title"><h2 id="month-money">@L["Финансы за месяц", "This month"]</h2><a href="finance">@L["Подробнее", "Details"]</a></div>
+                @if (_data.MonthCashFlow.Count == 0)
+                {
+                    <p class="muted">@L["Операций в этом месяце нет.", "No operations this month."]</p>
+                }
+                @foreach (var flow in _data.MonthCashFlow)
+                {
+                    <div class="grid-3 section">
+                        <div class="stat"><span class="stat-label">@L["Доходы", "Income"]</span><span class="num">@L.Money(flow.Income, flow.CurrencyCode)</span></div>
+                        <div class="stat"><span class="stat-label">@L["Расходы", "Expenses"]</span><span class="num">@L.Money(flow.Expense, flow.CurrencyCode)</span></div>
+                        <div class="stat"><span class="stat-label">@L["Поток", "Net"]</span><span class="num @(flow.Net < 0 ? "negative" : null)">@L.Money(flow.Net, flow.CurrencyCode)</span></div>
+                    </div>
+                }
+                @foreach (var alert in _data.BudgetAlerts)
+                {
+                    <div class="stack section">
+                        <div class="row-between">
+                            <span>@(alert.CategoryName ?? L["Все расходы", "All expenses"])</span>
+                            <span class="small @(alert.State == BudgetState.Exceeded ? "negative" : null)">
+                                @(alert.State == BudgetState.Exceeded ? L["Лимит превышен", "Limit exceeded"] : L["Близко к лимиту", "Near the limit"]) · @L.Percent(alert.UsedPercent)
+                            </span>
+                        </div>
+                        <Meter Percent="alert.UsedPercent" State="@(alert.State == BudgetState.Exceeded ? "exceeded" : "warning")" Label="@alert.CategoryName" />
+                    </div>
+                }
+            </section>
+        </div>
+    </div>
+}
+
+@code {
+    private DashboardDto? _data;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Events.DataChanged += OnDataChanged;
+        await LoadAsync();
+    }
+
+    public void Dispose() => Events.DataChanged -= OnDataChanged;
+
+    private void OnDataChanged() => _ = InvokeAsync(LoadAsync);
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _data = await Api.GetAsync<DashboardDto>("/api/v1/dashboard");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        StateHasChanged();
+    }
+
+    private string Greeting()
+    {
+        var hour = L.ToLocal(DateTimeOffset.UtcNow).Hour;
+        var name = string.IsNullOrWhiteSpace(_data!.DisplayName) ? string.Empty : $", {_data.DisplayName}";
+        var greeting = hour >= 18 ? L["Добрый вечер", "Good evening"]
+            : hour >= 12 ? L["Добрый день", "Good afternoon"]
+            : hour >= 5 ? L["Доброе утро", "Good morning"]
+            : L["Доброй ночи", "Good night"];
+        return greeting + name;
+    }
+
+    private async Task ToggleTaskAsync(DashboardTaskDto task)
+    {
+        try
+        {
+            await Api.PostAsync<TaskDto>($"/api/v1/tasks/{task.Id}/status", new SetTaskStatusRequest(task.IsDone ? TaskItemStatus.Open : TaskItemStatus.Done));
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task ToggleHabitAsync(DashboardHabitDto habit)
+    {
+        var url = $"/api/v1/habits/{habit.Id}/completions/{Query.Iso(_data!.Today)}";
+        try
+        {
+            if (habit.Completed)
+            {
+                await Api.DeleteAsync<PersonalPlatform.Contracts.Habits.HabitCompletionResult>(url);
+            }
+            else
+            {
+                await Api.PutAsync<PersonalPlatform.Contracts.Habits.HabitCompletionResult>(url, new { });
+            }
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+}

@@ -1,0 +1,32 @@
+@using PersonalPlatform.Contracts.Auth
+@inject ApiClient Api
+<form class="stack" @onsubmit="SendAsync">
+    <label class="field">
+        <span>@L["Отправить новую ссылку на email", "Send a new link to"]</span>
+        <input type="email" @bind="_email" required maxlength="254" autocomplete="email" />
+    </label>
+    @if (_sent)
+    {
+        <p role="status" class="muted">@L["Если адрес зарегистрирован и не подтверждён, письмо отправлено.", "If the address is registered and not yet confirmed, we have sent an email."]</p>
+    }
+    <button type="submit" class="button">@L["Отправить", "Send"]</button>
+</form>
+
+@code {
+    private string _email = string.Empty;
+    private bool _sent;
+
+    private async Task SendAsync()
+    {
+        try
+        {
+            await Api.PostAsync<AcceptedResponse>("/api/v1/auth/resend-confirmation", new EmailRequest(_email.Trim()));
+        }
+        catch (ApiException)
+        {
+            // The response is deliberately the same in every case.
+        }
+
+        _sent = true;
+    }
+}
