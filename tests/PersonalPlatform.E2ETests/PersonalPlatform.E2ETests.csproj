@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Browser tests: real Kestrel host + disposable PostgreSQL + Chromium via Playwright. -->
+  <PropertyGroup>
+    <RootNamespace>PersonalPlatform.E2ETests</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PersonalPlatform.TestInfrastructure\PersonalPlatform.TestInfrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
+    <PackageReference Include="Microsoft.Playwright" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="PersonalPlatform.TestInfrastructure" />
+  </ItemGroup>
+</Project>
