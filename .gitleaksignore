@@ -1,0 +1,3 @@
+# False positives reviewed by hand. Format: <commit>:<file>:<rule>:<line>
+# Example Idempotency-Key value (a random UUID, not a credential) in the API documentation example.
+0adec096276e89029cded15e4dd9c2b25f3aa456:docs/API.md:generic-api-key:56

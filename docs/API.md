@@ -53,7 +53,7 @@ refresh-токен приходит только в cookie `__Host-pp_refresh` �
 ```http
 POST /api/v1/finance/transactions
 Authorization: Bearer eyJ...
-Idempotency-Key: 6f1c2a9e-3b7d-4c55-9a51-0e8b2f6d1a44
+Idempotency-Key: transfer-2026-10-05-0001
 Content-Type: application/json
 
 { "kind": "Transfer", "occurredOn": "2026-10-05", "description": null,
