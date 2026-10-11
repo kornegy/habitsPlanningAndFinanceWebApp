@@ -1,0 +1,92 @@
+# Local environment: PostgreSQL, Mailpit (dev SMTP catcher), migration job and the application.
+#   1. ./deploy/scripts/generate-dev-env.sh      (creates .env with random local secrets; never commit it)
+#   2. docker compose up --build
+#   3. open http://localhost:8080  (emails: http://localhost:8025)
+# The database is reachable only on the internal network; nothing but the app and Mailpit's UI is published,
+# and both only on 127.0.0.1.
+name: personal-platform
+
+services:
+  db:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_DB: personal_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?run deploy/scripts/generate-dev-env.sh}
+      PP_OWNER_PASSWORD: ${PP_OWNER_PASSWORD:?missing}
+      PP_APP_PASSWORD: ${PP_APP_PASSWORD:?missing}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres/init/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+      - ./deploy/postgres/roles.sql:/docker-entrypoint-initdb.d/roles.sql.inc:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d personal_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.31.5@sha256:94f6b70c1436defae6799d9ac7ff0eeff9540465b842026d5cdb018f1c0234ea
+    networks: [backend]
+    ports:
+      - "127.0.0.1:8025:8025"
+    restart: unless-stopped
+
+  migrator:
+    build:
+      context: .
+      target: migrator
+    environment:
+      PP_MIGRATIONS_CONNECTION: "Host=db;Database=personal_platform;Username=pp_owner;Password=${PP_OWNER_PASSWORD}"
+    networks: [backend]
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runtime
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Postgres: "Host=db;Database=personal_platform;Username=pp_app;Password=${PP_APP_PASSWORD};Timeout=15;Command Timeout=30;Maximum Pool Size=50"
+      Jwt__ActiveKeyId: ${JWT_KEY_ID:?missing}
+      Jwt__SigningKeys__0__KeyId: ${JWT_KEY_ID:?missing}
+      Jwt__SigningKeys__0__Key: ${JWT_SIGNING_KEY:?missing}
+      AccountEmails__PublicBaseUrl: "http://localhost:8080"
+      Email__Mode: Smtp
+      Email__SmtpHost: mailpit
+      Email__SmtpPort: "1025"
+      Email__UseTls: "false"
+      Email__FromAddress: "no-reply@personal-platform.local"
+      Security__AllowedOrigins__0: "http://localhost:8080"
+      Bootstrap__AdminEmails__0: ${ADMIN_EMAIL:-}
+    networks: [backend, frontend]
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+networks:
+  backend:
+    internal: true
+  frontend: {}
+
+volumes:
+  pgdata: {}

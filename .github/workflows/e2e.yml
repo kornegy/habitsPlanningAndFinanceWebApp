@@ -1,0 +1,52 @@
+name: E2E and DAST
+
+# Browser tests and the OWASP ZAP baseline scan run against a disposable environment. They are slower than
+# the PR pipeline, so they run on main, nightly and on demand.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet build tests/PersonalPlatform.E2ETests -c Release
+      - name: Install Chromium for Playwright
+        run: pwsh tests/PersonalPlatform.E2ETests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+      - name: Run E2E tests
+        run: dotnet test -c Release --no-build --project tests/PersonalPlatform.E2ETests --report-trx
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-traces
+          path: tests/PersonalPlatform.E2ETests/bin/Release/net10.0/playwright-traces/**
+
+  dast:
+    name: OWASP ZAP baseline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start disposable stack
+        run: |
+          ./deploy/scripts/generate-dev-env.sh
+          docker compose up -d --build --wait app
+      - name: ZAP baseline scan (passive; fails on WARN/FAIL not listed in deploy/zap/rules.tsv)
+        run: >
+          docker run --rm --network host -v "$PWD/deploy/zap:/zap/wrk:rw" zaproxy/zap-stable:2.17.0
+          zap-baseline.py -t http://localhost:8080 -c rules.tsv -r zap-report.html -I
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v

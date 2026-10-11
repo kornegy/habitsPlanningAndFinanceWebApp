@@ -4,8 +4,8 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Http.Timeouts;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using PersonalPlatform.Api.Infrastructure;
 using PersonalPlatform.Api.Security;
@@ -14,6 +14,11 @@ using PersonalPlatform.Application.Common;
 using PersonalPlatform.Infrastructure;
 using PersonalPlatform.Infrastructure.Identity;
 using PersonalPlatform.Infrastructure.Persistence;
+
+if (args is ["--healthcheck"])
+{
+    return await HealthProbe.CheckAsync();
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +29,7 @@ ConfigureServices(builder.Services, builder.Configuration, builder.Environment);
 var app = builder.Build();
 ConfigurePipeline(app);
 await app.RunAsync();
+return 0;
 
 static void ConfigureLogging(WebApplicationBuilder builder)
 {
