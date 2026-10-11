@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using MimeKit;
 using PersonalPlatform.Api.Infrastructure;
 using PersonalPlatform.Infrastructure.Email;
