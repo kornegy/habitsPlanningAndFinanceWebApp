@@ -39,7 +39,7 @@ services:
       context: .
       target: migrator
     environment:
-      PP_MIGRATIONS_CONNECTION: "Host=db;Database=personal_platform;Username=pp_owner;Password=${PP_OWNER_PASSWORD}"
+      PP_MIGRATIONS_CONNECTION: "Host=db;Database=personal_platform;Username=pp_owner;Password=${PP_OWNER_PASSWORD};GSS Encryption Mode=Disable"
     networks: [backend]
     depends_on:
       db:
@@ -55,7 +55,7 @@ services:
       target: runtime
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Postgres: "Host=db;Database=personal_platform;Username=pp_app;Password=${PP_APP_PASSWORD};Timeout=15;Command Timeout=30;Maximum Pool Size=50"
+      ConnectionStrings__Postgres: "Host=db;Database=personal_platform;Username=pp_app;Password=${PP_APP_PASSWORD};Timeout=15;Command Timeout=30;Maximum Pool Size=50;GSS Encryption Mode=Disable"
       Jwt__ActiveKeyId: ${JWT_KEY_ID:?missing}
       Jwt__SigningKeys__0__KeyId: ${JWT_KEY_ID:?missing}
       Jwt__SigningKeys__0__Key: ${JWT_SIGNING_KEY:?missing}

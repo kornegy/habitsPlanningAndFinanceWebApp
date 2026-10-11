@@ -1,0 +1,17 @@
+# Load-test overlay for the production stack. NEVER use it for a real deployment: it raises the application's
+# abuse limits (so that a single load generator is not throttled) and publishes the app port on loopback so the
+# measurement covers app + database without the proxy's per-IP limit.
+#
+#   docker compose -p pp-load -f deploy/production/docker-compose.prod.yml -f tests/load/docker-compose.loadtest.yml \
+#     --env-file <prod.env for a disposable environment> up -d --wait
+services:
+  app:
+    ports:
+      - "127.0.0.1:18081:8080"
+    environment:
+      RateLimits__UserRequestsPerMinute: "1000000"
+      RateLimits__AnonymousRequestsPerMinute: "1000000"
+      RateLimits__AuthRequestsPerMinute: "1000000"
+      RateLimits__RefreshRequestsPerMinute: "1000000"
+      RateLimits__ExportsPerMinute: "1000000"
+      RateLimits__ReportRequestsPerMinute: "1000000"
