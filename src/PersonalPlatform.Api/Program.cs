@@ -206,6 +206,9 @@ static void ConfigurePipeline(WebApplication app)
 
     // Blazor WebAssembly client (same origin as the API).
     app.MapStaticAssets().AllowAnonymous();
+
+    // Unknown file-like paths (e.g. /robots.txt) are a plain 404, not the host page and not a 401.
+    app.MapFallback("{*path:file}", () => Results.NotFound()).AllowAnonymous();
     // The host page references framework files by stable names, so browsers must revalidate it (ETag) on every
     // load to pick up a new deployment.
     app.MapFallbackToFile("index.html", new StaticFileOptions

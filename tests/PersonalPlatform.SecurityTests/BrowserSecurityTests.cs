@@ -130,6 +130,21 @@ public sealed class BrowserSecurityTests(ApiTestEnvironment env)
         Assert.DoesNotContain("'unsafe-inline'", csp, StringComparison.Ordinal);
         Assert.DoesNotContain("'unsafe-eval'", csp, StringComparison.Ordinal);
         Assert.DoesNotContain("*", csp, StringComparison.Ordinal);
+        Assert.Equal("require-corp", response.Headers.GetValues("Cross-Origin-Embedder-Policy").Single());
+        Assert.Equal("same-origin", response.Headers.GetValues("Cross-Origin-Opener-Policy").Single());
+    }
+
+    [Theory]
+    [InlineData("/robots.txt")]
+    [InlineData("/does-not-exist.js")]
+    [InlineData("/_framework/unknown.wasm")]
+    public async Task Unknown_files_are_not_found_without_authentication_noise(string path)
+    {
+        using var client = env.Api.CreateBareClient();
+
+        var response = await client.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]

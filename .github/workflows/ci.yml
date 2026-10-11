@@ -144,10 +144,15 @@ jobs:
           docker run --rm -v "$PWD:/src" aquasec/trivy:0.75.0
           config --severity HIGH,CRITICAL --exit-code 1 /src
       - name: SBOM (CycloneDX, syft)
-        run: >
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out" anchore/syft:v1.54.1-nonroot
-          personal-platform:ci -o cyclonedx-json=/out/sbom.cdx.json
+        run: |
+          # syft runs as a non-root user: give it a writable directory and an image archive instead of the
+          # Docker socket.
+          mkdir -p sbom && chmod a+w sbom
+          docker save personal-platform:ci -o sbom/image.tar && chmod a+r sbom/image.tar
+          docker run --rm -v "$PWD/sbom:/out" anchore/syft:v1.54.1-nonroot \
+            docker-archive:/out/image.tar -o cyclonedx-json=/out/sbom.cdx.json
+          rm sbom/image.tar
       - uses: actions/upload-artifact@v4
         with:
           name: sbom
-          path: sbom.cdx.json
+          path: sbom/sbom.cdx.json

@@ -81,6 +81,9 @@ public static class SecurityHeadersExtensions
                 headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()";
                 headers["Cross-Origin-Opener-Policy"] = "same-origin";
                 headers["Cross-Origin-Resource-Policy"] = "same-origin";
+                // Everything is served from this origin, so requiring CORP for embedded resources costs nothing and
+                // isolates the page from cross-origin resources.
+                headers["Cross-Origin-Embedder-Policy"] = "require-corp";
                 if (isApi)
                 {
                     // Personal and financial data must never be stored by browsers or shared caches.

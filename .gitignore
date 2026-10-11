@@ -30,3 +30,4 @@ appsettings.*.local.json
 .DS_Store
 Thumbs.db
 .mail/
+sbom/
