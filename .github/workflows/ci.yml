@@ -132,9 +132,11 @@ jobs:
           docker compose config -q
           docker compose -f deploy/production/docker-compose.prod.yml --env-file deploy/production/prod.env.example config -q
       - name: Trivy image scan (fail on HIGH/CRITICAL with an available fix)
-        run: >
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.75.0
-          image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 personal-platform:ci
+        run: |
+          for image in personal-platform:ci personal-platform-migrator:ci; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.75.0 \
+              image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
+          done
       - name: Trivy misconfiguration scan (Dockerfile, compose)
         run: >
           docker run --rm -v "$PWD:/src" aquasec/trivy:0.75.0

@@ -40,7 +40,7 @@ RUN dotnet publish src/PersonalPlatform.Api/PersonalPlatform.Api.csproj -c Relea
 FROM ${RUNTIME_DEPS_IMAGE} AS migrator
 WORKDIR /migrator
 COPY --from=build --chown=root:root --chmod=0555 /out/migrator/efbundle ./efbundle
-USER app
+USER 1654:1654
 ENTRYPOINT ["./efbundle"]
 
 # --- Application.
@@ -50,9 +50,9 @@ ENV ASPNETCORE_HTTP_PORTS=8080 \
     ASPNETCORE_ENVIRONMENT=Production \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_gcServer=0
-# Application files are owned by root and read-only for the runtime user.
+# Application files are owned by root and read-only for the runtime user ("app", uid/gid 1654 in the .NET images).
 COPY --from=build --chown=root:root /out/app ./
-USER app
+USER 1654:1654
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD ["dotnet", "PersonalPlatform.Api.dll", "--healthcheck"]
