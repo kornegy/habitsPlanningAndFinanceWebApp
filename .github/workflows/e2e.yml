@@ -27,7 +27,7 @@ jobs:
         run: pwsh tests/PersonalPlatform.E2ETests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
       - name: Run E2E tests
         run: dotnet test -c Release --no-build --project tests/PersonalPlatform.E2ETests --report-trx
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: e2e-traces
@@ -49,7 +49,7 @@ jobs:
           chmod a+w deploy/zap
           docker run --rm --network host -v "$PWD/deploy/zap:/zap/wrk:rw" zaproxy/zap-stable:2.17.0 \
             zap-baseline.py -t http://localhost:8080 -c rules.tsv -r zap-report.html
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: zap-report
