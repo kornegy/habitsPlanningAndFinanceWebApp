@@ -159,6 +159,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
         builder.HasDefaultSchema(Schema);
         builder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
         IdentityModel.Configure(builder);
+        UseClientGeneratedKeys(builder);
         ApplyOwnerFilters(builder);
     }
 
@@ -167,6 +168,23 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
         Span<byte> hash = stackalloc byte[32];
         SHA256.HashData(Encoding.UTF8.GetBytes($"{userId:N}:{scope}"), hash);
         return BitConverter.ToInt64(hash[..8]);
+    }
+
+    /// <summary>
+    /// Domain entities create their own (UUIDv7) ids. Marking the keys as never generated tells EF Core that an
+    /// entity with a key value that it discovers through a navigation (e.g. a new subtask or ledger entry) is new
+    /// and must be INSERTed, not UPDATEd.
+    /// </summary>
+    private static void UseClientGeneratedKeys(ModelBuilder builder)
+    {
+        foreach (var entityType in builder.Model.GetEntityTypes().Where(t => t.ClrType.Namespace?.StartsWith("PersonalPlatform.Domain", StringComparison.Ordinal) == true))
+        {
+            var key = entityType.FindPrimaryKey();
+            if (key is { Properties: [{ ClrType: var type } property] } && type == typeof(Guid))
+            {
+                property.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never;
+            }
+        }
     }
 
     private void ApplyOwnerFilters(ModelBuilder builder)

@@ -41,7 +41,7 @@ public sealed partial class ApiExceptionHandler(IProblemDetailsService problemDe
         ValidationException validation => ValidationProblem(validation),
         DomainRuleException rule => Problem(StatusCodes.Status422UnprocessableEntity, "The request violates a business rule.", rule.Code, rule.Message),
         NotFoundException => Problem(StatusCodes.Status404NotFound, "Not found.", "not_found"),
-        ConflictException conflict => Problem(StatusCodes.Status409Conflict, "Conflict.", conflict.Code, conflict.Message),
+        ConflictException conflict => WithDetails(Problem(StatusCodes.Status409Conflict, "Conflict.", conflict.Code, conflict.Message), conflict.Details),
         UniqueConstraintException => Problem(StatusCodes.Status409Conflict, "An item with the same unique value already exists.", "duplicate"),
         AuthFailedException auth => auth.Code switch
         {
@@ -69,6 +69,16 @@ public sealed partial class ApiExceptionHandler(IProblemDetailsService problemDe
             .Where(e => !string.IsNullOrEmpty(e.ErrorCode))
             .GroupBy(e => e.PropertyName)
             .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorCode).Distinct().ToArray());
+        return problem;
+    }
+
+    private static ProblemDetails WithDetails(ProblemDetails problem, object? details)
+    {
+        if (details is not null)
+        {
+            problem.Extensions["details"] = details;
+        }
+
         return problem;
     }
 

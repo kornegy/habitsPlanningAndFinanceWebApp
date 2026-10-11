@@ -47,7 +47,16 @@ public sealed class ConflictException : Exception
         Code = "conflict";
     }
 
+    public ConflictException(string code, string message, Exception innerException)
+        : base(message, innerException)
+    {
+        Code = code;
+    }
+
     public string Code { get; }
+
+    /// <summary>Optional machine-readable details returned to the caller (must contain only the caller's own data).</summary>
+    public object? Details { get; init; }
 
     public static ConflictException StaleVersion() =>
         new("concurrency_conflict", "The item was changed by another request. Reload it and try again.");
