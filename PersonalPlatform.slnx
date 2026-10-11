@@ -8,6 +8,7 @@
     <Project Path="src/PersonalPlatform.Infrastructure/PersonalPlatform.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/PersonalPlatform.ArchitectureTests/PersonalPlatform.ArchitectureTests.csproj" />
     <Project Path="tests/PersonalPlatform.IntegrationTests/PersonalPlatform.IntegrationTests.csproj" />
     <Project Path="tests/PersonalPlatform.SecurityTests/PersonalPlatform.SecurityTests.csproj" />
     <Project Path="tests/PersonalPlatform.TestInfrastructure/PersonalPlatform.TestInfrastructure.csproj" />
