@@ -63,8 +63,9 @@
 |---|---|
 | CSP страницы | `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`. `wasm-unsafe-eval` нужен для компиляции WebAssembly; `unsafe-inline` и `unsafe-eval` не используются. Если в `index.html` появится inline-скрипт, его SHA-256 автоматически добавится в политику, но архитектурный тест запрещает такие скрипты |
 | CSP ответов API | `default-src 'none'; frame-ancestors 'none'` |
-| Прочие заголовки | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` (камера, микрофон, геолокация, платежи, USB запрещены), `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, HSTS (`max-age=31536000; includeSubDomains`) при `Security:EnableHsts=true` |
+| Прочие заголовки | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` (камера, микрофон, геолокация, платежи, USB запрещены), `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp`, HSTS (`max-age=31536000; includeSubDomains`) при `Security:EnableHsts=true` |
 | Кэширование | ответы API — `Cache-Control: no-store`; страница-хост — `no-cache` (ETag) |
+| Несуществующие файлы | 404 (а не страница-хост и не 401) |
 | CORS | не включён: браузер не получает `Access-Control-Allow-*` ни для какого origin (`Cors_preflight_*`, `Simple_cross_origin_*`) |
 | CSRF | обычные API-запросы используют Bearer-токен (не отправляется автоматически). Эндпоинты с cookie (`refresh`, `logout`) требуют `SameSite=Strict` cookie, заголовок `X-CSRF: 1` (кросс-сайтовый запрос с ним невозможен без preflight, а CORS закрыт) и, если браузер их прислал, `Sec-Fetch-Site: same-origin`/`none` и `Origin` из списка разрешённых (`Cross_site_refresh_and_logout_are_rejected`, `CsrfTests`) |
 | XSS | Blazor экранирует вывод; `MarkupString`, `innerHTML`, `eval` запрещены архитектурными тестами; E2E-тесты вводят `<script>` и `<img onerror>` в задачи и заметки и проверяют, что никакой диалог не открылся; JSON кодирует `<`, `>` и `&` |
@@ -131,9 +132,8 @@ CAPTCHA не реализована: регистрация и сброс пар
 ## 7. Известные ограничения и что не проверено
 
 - Не проводился внешний pentest и ручной аудит кода третьей стороной.
-- CI на GitHub выполнен частично (тесты, CodeQL, зависимости, gitleaks — успешно; задача контейнеров ещё не
-  выполнялась), алерты CodeQL не просматривались; локально выполнены все тестовые наборы, gitleaks, hadolint,
-  Trivy, ZAP baseline — см. [TESTING.md](TESTING.md).
+- CI и E2E/DAST на GitHub зелёные (см. [TESTING.md](TESTING.md)), но результаты CodeQL (вкладка Security)
+  не просматривались: успешное завершение анализа не означает отсутствия алертов.
 - ZAP baseline — пассивное сканирование; SPA даёт поисковому роботу мало URL. Активное сканирование API
   с аутентификацией не выполнялось.
 - Rate limiting — в памяти процесса (см. выше); CAPTCHA нет.

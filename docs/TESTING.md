@@ -58,9 +58,9 @@ PostgreSQL 17 в Docker, Chromium 141 (Playwright build 1194).
 | Unit | 202 | 202 | 0 | 6 с |
 | Architecture | 27 | 27 | 0 | 2 с |
 | Integration | 57 | 57 | 0 | 26 с |
-| Security | 71 | 71 | 0 | 29 с |
+| Security | 74 | 74 | 0 | 29 с |
 | E2E (Chromium) | 12 | 12 | 0 | ≈1,5 мин |
-| **Всего** | **369** | **369** | **0** | |
+| **Всего** | **372** | **372** | **0** | |
 
 Сборка `-c Release`: 0 предупреждений, 0 ошибок (предупреждения считаются ошибками, анализаторы включены).
 `dotnet format --verify-no-changes`: без изменений.
@@ -101,15 +101,17 @@ PostgreSQL 17 в Docker, Chromium 141 (Playwright build 1194).
 
 ### CI на GitHub Actions
 
-Workflow CI запускался на GitHub для pull request'ов Dependabot. Последний прогон (run 38159901529, код
-коммита `58797cd`): форматирование, сборка Release, Unit (202), Architecture, Integration (57) и Security (71)
-тесты — успешно; CodeQL (`security-extended`) — анализ выполнен успешно; поиск уязвимых зависимостей и
-gitleaks — успешно. Упали два шага конфигурации CI, а не кода: проверка миграций (`dotnet ef … -c Release`:
-у `dotnet ef` ключ `-c` означает `--context`, искалась сборка Debug) и отчёт о покрытии (на раннере
-результаты пишутся в корневой `TestResults/`, а шаблон искал их в `tests/**`). Оба шага исправлены
-(`--configuration Release`, явный `--results-directory TestResults`) и проверены локально; добавлен порог
-покрытия ≥ 90 % для Domain/Application/Infrastructure (`deploy/ci/check-coverage.py`). Из-за падения этой
-задачи зависимая задача сборки и сканирования контейнеров на GitHub была пропущена.
+Финальный прогон на коммите `2e199a0` (запуск вручную, `workflow_dispatch`):
+
+| Workflow | Run | Результат |
+|---|---|---|
+| CI | 38162071092 | ✅ все задачи: форматирование, сборка Release, Unit, Architecture, Integration, Security, проверка миграций, отчёт и порог покрытия (≥ 90 % для Domain/Application/Infrastructure), CodeQL, уязвимые зависимости, gitleaks, hadolint, сборка образов, проверка compose, Trivy (образы и конфигурация), SBOM |
+| E2E and DAST | 38162073181 | ✅ Playwright E2E (Chromium, устанавливаемый Playwright 1.63) и OWASP ZAP baseline против dev-стенда `docker compose` |
+
+Первые прогоны на GitHub выявили и привели к исправлению: шаг проверки миграций (`-c` у `dotnet ef` — это
+`--context`), путь результатов тестов для отчёта о покрытии, права записи для syft, предупреждение ZAP об
+отсутствии `Cross-Origin-Embedder-Policy` (добавлен `require-corp`) и ответ 401 вместо 404 для
+несуществующих файлов вроде `/robots.txt`.
 
 ### Сканеры и проверки поставки
 
@@ -139,13 +141,10 @@ IPv6-адресе в сети Docker без IPv6.
 
 ## Что не выполнялось
 
-- E2E/DAST workflow на GitHub (запускается для `main`, по расписанию и вручную) и задача сборки контейнеров
-  в CI ещё не выполнялись на GitHub; их шаги выполнены локально эквивалентными командами.
 - Предупреждения CodeQL не просматривались (анализ на GitHub завершился успешно, но список алертов через API
   не проверялся).
-- SBOM (syft) не генерировался локально.
-- Полный dev-стенд `docker compose up` с Mailpit не запускался (образ Mailpit не удалось загрузить из-за
-  лимита Docker Hub); production-стенд проверен полностью, конфигурация dev-стенда валидируется `docker compose config`.
+- Dev-стенд `docker compose up` с Mailpit локально не запускался (лимит Docker Hub); на GitHub он
+  поднимается в DAST-задаче и сканируется ZAP.
 - Реальная доставка писем через SMTP и настоящий TLS-сертификат.
 - E2E в Firefox и WebKit; автоматизированный аудит доступности.
 - Активное DAST-сканирование API с аутентификацией, внешний pentest, мутационное тестирование.

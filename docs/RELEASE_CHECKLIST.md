@@ -9,12 +9,12 @@
 |---|---|
 | `dotnet build -c Release` без предупреждений | ✅ |
 | `dotnet format --verify-no-changes` | ✅ |
-| Unit, Architecture, Integration, Security — все зелёные | ✅ 357/357 |
+| Unit, Architecture, Integration, Security — все зелёные | ✅ 360/360 |
 | E2E (Chromium) — зелёные | ✅ 12/12 |
 | Покрытие Domain/Application/Infrastructure ≥ 90 % | ✅ 93,2 / 90,9 / 96,7 % |
 | `dotnet ef migrations has-pending-model-changes` — изменений нет | ✅ |
-| CI на GitHub Actions зелёный (включая CodeQL) | ⬜ тесты и CodeQL прошли на GitHub; исправлены два шага конфигурации CI, нужен повторный прогон |
-| E2E/DAST workflow зелёный | ⬜ (локально: E2E и ZAP baseline пройдены) |
+| CI на GitHub Actions зелёный (включая CodeQL) | ✅ run 38162071092 |
+| E2E/DAST workflow зелёный | ✅ run 38162073181 |
 
 ## Безопасность
 
