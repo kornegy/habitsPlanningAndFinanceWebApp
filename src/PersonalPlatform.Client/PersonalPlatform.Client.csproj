@@ -5,7 +5,12 @@
   -->
   <PropertyGroup>
     <RootNamespace>PersonalPlatform.Client</RootNamespace>
-    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <!--
+      index.html references assets by their stable names (no build-time placeholder rewriting, no inline import
+      map): the rewritten page is not carried into the publish output of the hosting API project, and without an
+      inline script the CSP needs no hash. MapStaticAssets still serves fingerprinted framework files and
+      revalidates the stable names with ETags.
+    -->
     <BlazorWebAssemblyLoadAllGlobalizationData>true</BlazorWebAssemblyLoadAllGlobalizationData>
   </PropertyGroup>
   <ItemGroup>

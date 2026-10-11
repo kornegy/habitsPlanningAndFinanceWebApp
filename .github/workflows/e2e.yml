@@ -43,10 +43,17 @@ jobs:
         run: |
           ./deploy/scripts/generate-dev-env.sh
           docker compose up -d --build --wait app
-      - name: ZAP baseline scan (passive; fails on WARN/FAIL not listed in deploy/zap/rules.tsv)
-        run: >
-          docker run --rm --network host -v "$PWD/deploy/zap:/zap/wrk:rw" zaproxy/zap-stable:2.17.0
-          zap-baseline.py -t http://localhost:8080 -c rules.tsv -r zap-report.html -I
+      - name: ZAP baseline scan (passive; any WARN or FAIL not ignored in deploy/zap/rules.tsv fails the job)
+        run: |
+          # The ZAP container runs as its own user and writes its report into the mounted directory.
+          chmod a+w deploy/zap
+          docker run --rm --network host -v "$PWD/deploy/zap:/zap/wrk:rw" zaproxy/zap-stable:2.17.0 \
+            zap-baseline.py -t http://localhost:8080 -c rules.tsv -r zap-report.html
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-report
+          path: deploy/zap/zap-report.html
       - name: Stop stack
         if: always()
         run: docker compose down -v

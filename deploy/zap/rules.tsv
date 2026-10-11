@@ -1,1 +1,3 @@
 10049	IGNORE	(Non-storable content: API responses are intentionally no-store)
+10109	IGNORE	(Modern Web Application: informational, the client is a Blazor WebAssembly SPA)
+10015	IGNORE	(Re-examine Cache-control: only the static, non-personal host page is cacheable, with no-cache + ETag; all API responses are no-store)

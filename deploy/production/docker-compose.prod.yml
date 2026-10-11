@@ -1,0 +1,177 @@
+# Production stack: TLS reverse proxy (nginx) -> application -> PostgreSQL, plus a one-shot migration job.
+#
+#   1. Build and push the images from the repository Dockerfile (targets "runtime" and "migrator") and put their
+#      digests into prod.env (copy prod.env.example; keep it outside version control).
+#   2. Create the secret files once:  deploy/scripts/generate-prod-secrets.sh /etc/personal-platform/secrets
+#      (or write the same files from your secret manager). Put the TLS certificate into TLS_DIR.
+#   3. docker compose -f deploy/production/docker-compose.prod.yml --env-file /etc/personal-platform/prod.env up -d
+#
+# Network layout: only the proxy publishes ports. "edge" carries public traffic, "frontend" (internal) connects
+# the proxy to the app, "backend" (internal) connects the app and the migration job to the database, and
+# "egress" gives the app outbound access for SMTP. The database is never reachable from outside.
+# Secrets are mounted as files and read through PP_SECRETS_DIR / *_FILE variables, never passed as environment
+# variables, so they do not appear in `docker inspect`.
+name: personal-platform
+
+x-hardening: &hardening
+  read_only: true
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  proxy:
+    image: nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+    <<: [*hardening, *logging]
+    user: "101:101"
+    # Skip the image's entrypoint scripts: they rewrite config files, which is neither needed nor possible
+    # on a read-only filesystem.
+    entrypoint: ["nginx", "-g", "daemon off;"]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${TLS_DIR:?set TLS_DIR}:/etc/nginx/tls:ro
+    tmpfs:
+      - /tmp:size=32m
+    ports:
+      - "${HTTP_PORT:-80}:8080"
+      - "${HTTPS_PORT:-443}:8443"
+    networks:
+      edge: {}
+      frontend:
+        ipv4_address: 172.30.10.10
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+  app:
+    image: ${APP_IMAGE:?set APP_IMAGE to the pushed runtime image digest}
+    <<: [*hardening, *logging]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      PP_SECRETS_DIR: /run/secrets
+      AccountEmails__PublicBaseUrl: "https://${PUBLIC_HOST:?set PUBLIC_HOST}"
+      Security__AllowedOrigins__0: "https://${PUBLIC_HOST}"
+      # Only the proxy's fixed address may supply X-Forwarded-For / X-Forwarded-Proto.
+      Security__KnownProxies__0: 172.30.10.10
+      Security__EnableHsts: "true"
+      Jwt__ActiveKeyId: ${JWT_ACTIVE_KEY_ID:?set JWT_ACTIVE_KEY_ID}
+      Jwt__SigningKeys__0__KeyId: ${JWT_ACTIVE_KEY_ID}
+      DataProtection__CertificatePath: /run/keys/dataprotection.pfx
+      Email__Mode: Smtp
+      Email__SmtpHost: ${SMTP_HOST:?set SMTP_HOST}
+      Email__SmtpPort: ${SMTP_PORT:-587}
+      Email__UseTls: "true"
+      Email__SmtpUsername: ${SMTP_USERNAME:-}
+      Email__FromAddress: ${MAIL_FROM:?set MAIL_FROM}
+      Bootstrap__AdminEmails__0: ${ADMIN_EMAIL:-}
+    secrets:
+      - source: app_connection_string
+        target: ConnectionStrings__Postgres
+      - source: jwt_signing_key
+        target: Jwt__SigningKeys__0__Key
+      - source: smtp_password
+        target: Email__SmtpPassword
+      - source: dataprotection_certificate_password
+        target: DataProtection__CertificatePassword
+    volumes:
+      - ${SECRETS_DIR:?set SECRETS_DIR}/dataprotection.pfx:/run/keys/dataprotection.pfx:ro
+    tmpfs:
+      - /tmp:size=64m
+    networks: [frontend, backend, egress]
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          pids: 512
+    restart: unless-stopped
+
+  migrator:
+    image: ${MIGRATOR_IMAGE:?set MIGRATOR_IMAGE to the pushed migrator image digest}
+    <<: [*hardening, *logging]
+    environment:
+      PP_MIGRATIONS_CONNECTION_FILE: /run/secrets/migrations_connection
+    secrets: [migrations_connection]
+    tmpfs:
+      - /tmp:size=64m
+    networks: [backend]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  db:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    <<: [*hardening, *logging]
+    # Runs as the image's postgres user; a fresh named volume inherits that ownership from the image.
+    user: "70:70"
+    environment:
+      POSTGRES_DB: personal_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_superuser_password
+      PP_OWNER_PASSWORD_FILE: /run/secrets/pp_owner_password
+      PP_APP_PASSWORD_FILE: /run/secrets/pp_app_password
+    secrets: [pg_superuser_password, pp_owner_password, pp_app_password]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../postgres/init/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+      - ../postgres/roles.sql:/docker-entrypoint-initdb.d/roles.sql.inc:ro
+    tmpfs:
+      - /tmp:size=64m
+      - /var/run/postgresql:size=8m
+    shm_size: 256m
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d personal_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    stop_grace_period: 60s
+    restart: unless-stopped
+
+secrets:
+  pg_superuser_password:
+    file: ${SECRETS_DIR}/pg_superuser_password
+  pp_owner_password:
+    file: ${SECRETS_DIR}/pp_owner_password
+  pp_app_password:
+    file: ${SECRETS_DIR}/pp_app_password
+  app_connection_string:
+    file: ${SECRETS_DIR}/app_connection_string
+  migrations_connection:
+    file: ${SECRETS_DIR}/migrations_connection
+  jwt_signing_key:
+    file: ${SECRETS_DIR}/jwt_signing_key
+  smtp_password:
+    file: ${SECRETS_DIR}/smtp_password
+  dataprotection_certificate_password:
+    file: ${SECRETS_DIR}/dataprotection_certificate_password
+
+networks:
+  edge: {}
+  frontend:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.10.0/24
+  backend:
+    internal: true
+  egress: {}
+
+volumes:
+  pgdata: {}

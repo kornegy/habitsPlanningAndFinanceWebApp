@@ -25,6 +25,17 @@ public sealed partial class SourceRulesTests
     }
 
     [Fact]
+    public void Host_page_has_no_inline_scripts_or_build_placeholders()
+    {
+        // The published API does not rewrite index.html, so placeholders would reach browsers unresolved, and
+        // any inline script would need a CSP hash. Scripts must be external files under 'self'.
+        var html = File.ReadAllText(Path.Combine(ClientDir, "wwwroot", "index.html"));
+
+        Assert.DoesNotMatch(@"<script(?![^>]*\bsrc=)[^>]*>", html);
+        Assert.DoesNotContain("#[.{fingerprint}]", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Client_never_persists_tokens_in_web_storage()
     {
         // The documentation comment in AuthSession mentions the APIs by name; code must never call them.

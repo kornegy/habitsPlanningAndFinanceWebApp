@@ -24,6 +24,14 @@ if (args is ["--healthcheck"])
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Production secrets can be mounted as files (Docker/Kubernetes secrets), one setting per file named like
+// "Jwt__SigningKeys__0__Key". They take precedence over appsettings and environment variables, and unlike
+// environment variables they are not visible through `docker inspect` or the process environment.
+if (Environment.GetEnvironmentVariable("PP_SECRETS_DIR") is { Length: > 0 } secretsDirectory)
+{
+    builder.Configuration.AddKeyPerFile(secretsDirectory, optional: false);
+}
+
 ConfigureLogging(builder);
 ConfigureKestrel(builder);
 ConfigureServices(builder.Services, builder.Configuration, builder.Environment);
@@ -198,7 +206,12 @@ static void ConfigurePipeline(WebApplication app)
 
     // Blazor WebAssembly client (same origin as the API).
     app.MapStaticAssets().AllowAnonymous();
-    app.MapFallbackToFile("index.html").AllowAnonymous();
+    // The host page references framework files by stable names, so browsers must revalidate it (ETag) on every
+    // load to pick up a new deployment.
+    app.MapFallbackToFile("index.html", new StaticFileOptions
+    {
+        OnPrepareResponse = context => context.Context.Response.Headers.CacheControl = "no-cache",
+    }).AllowAnonymous();
 }
 
 /// <summary>Entry point marker for WebApplicationFactory in tests.</summary>
