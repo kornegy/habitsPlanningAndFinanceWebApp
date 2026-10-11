@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Domain model and business invariants. Must not depend on any infrastructure package. -->
+  <PropertyGroup>
+    <RootNamespace>PersonalPlatform.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>

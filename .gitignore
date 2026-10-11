@@ -1,0 +1,32 @@
+# Build output
+bin/
+obj/
+publish/
+artifacts/
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+
+# Test output
+TestResults/
+coverage/
+*.trx
+playwright-traces/
+tests/load/results/
+
+# Secrets and local environment (never commit)
+.env
+.env.*
+!.env.example
+*.pfx
+*.pem
+*.key
+secrets/
+appsettings.*.local.json
+
+# OS
+.DS_Store
+Thumbs.db
+.mail/

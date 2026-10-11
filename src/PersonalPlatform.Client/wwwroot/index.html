@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="light" />
+    <title>Personal Platform</title>
+    <base href="/" />
+    <link rel="preload" id="webassembly" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="PersonalPlatform.Client.styles.css" />
+    <script type="importmap"></script>
+</head>
+<body>
+    <div id="app">
+        <div class="boot" role="status" aria-live="polite">
+            <span class="boot-mark" aria-hidden="true"></span>
+            <span class="visually-hidden">Loading…</span>
+        </div>
+    </div>
+    <div id="blazor-error-ui" role="alert">
+        <span>Произошла ошибка. An unexpected error occurred.</span>
+        <a href="" class="reload">Обновить / Reload</a>
+    </div>
+    <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+</body>
+</html>

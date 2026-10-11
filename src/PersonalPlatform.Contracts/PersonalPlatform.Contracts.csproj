@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Request/response DTOs shared by the API and the Blazor client. No dependencies on Domain or
+    infrastructure: everything here is visible to (and controllable by) the browser.
+  -->
+  <PropertyGroup>
+    <RootNamespace>PersonalPlatform.Contracts</RootNamespace>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+</Project>

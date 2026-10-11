@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PersonalPlatform.Api/PersonalPlatform.Api.csproj" />
+    <Project Path="src/PersonalPlatform.Application/PersonalPlatform.Application.csproj" />
+    <Project Path="src/PersonalPlatform.Client/PersonalPlatform.Client.csproj" />
+    <Project Path="src/PersonalPlatform.Contracts/PersonalPlatform.Contracts.csproj" />
+    <Project Path="src/PersonalPlatform.Domain/PersonalPlatform.Domain.csproj" />
+    <Project Path="src/PersonalPlatform.Infrastructure/PersonalPlatform.Infrastructure.csproj" />
+  </Folder>
+</Solution>

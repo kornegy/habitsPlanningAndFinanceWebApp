@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- HTTP host: authentication, authorisation, validation, middleware, composition root; serves the Blazor client. -->
+  <PropertyGroup>
+    <RootNamespace>PersonalPlatform.Api</RootNamespace>
+    <UserSecretsId>personal-platform-api-6b1d2f0e</UserSecretsId>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PersonalPlatform.Infrastructure\PersonalPlatform.Infrastructure.csproj" />
+    <ProjectReference Include="..\PersonalPlatform.Client\PersonalPlatform.Client.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PersonalPlatform.IntegrationTests" />
+    <InternalsVisibleTo Include="PersonalPlatform.SecurityTests" />
+    <InternalsVisibleTo Include="PersonalPlatform.TestInfrastructure" />
+  </ItemGroup>
+</Project>
