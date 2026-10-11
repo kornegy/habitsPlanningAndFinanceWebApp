@@ -128,6 +128,9 @@ jobs:
         run: |
           docker build --target runtime -t personal-platform:ci .
           docker build --target migrator -t personal-platform-migrator:ci .
+          # Apple Silicon / ARM servers: the SDK stage cross-compiles, so no emulation is needed.
+          docker build --platform linux/arm64 --target runtime -t personal-platform:ci-arm64 .
+          docker build --platform linux/arm64 --target migrator -t personal-platform-migrator:ci-arm64 .
       - name: Validate compose configuration
         run: |
           ./deploy/scripts/generate-dev-env.sh

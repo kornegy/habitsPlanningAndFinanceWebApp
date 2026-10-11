@@ -6,7 +6,8 @@ ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0@sha256:e70cdb7f80b0348f5cb85f19a
 ARG ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0@sha256:222759b391a1aaf241166672c8f99b2d4ada452e7b5319f3c6e8f265a37b5ad4
 ARG RUNTIME_DEPS_IMAGE=mcr.microsoft.com/dotnet/runtime-deps:10.0@sha256:12dd273c196e92aa91542749b8df0996f497f812811abba9e6613b484f681dd0
 
-FROM ${SDK_IMAGE} AS build
+# The SDK stage runs on the build machine natively and cross-targets the requested platform.
+FROM --platform=$BUILDPLATFORM ${SDK_IMAGE} AS build
 WORKDIR /src
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 
@@ -29,11 +30,19 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     && dotnet tool restore
 
 COPY src/ src/
-RUN dotnet publish src/PersonalPlatform.Api/PersonalPlatform.Api.csproj -c Release -o /out/app --no-restore \
+# The migration bundle is a native executable, so it must match the image architecture (x64 servers, arm64 on
+# Apple Silicon). TARGETARCH is provided by BuildKit.
+ARG TARGETARCH
+RUN case "${TARGETARCH:-amd64}" in \
+        amd64) rid=linux-x64 ;; \
+        arm64) rid=linux-arm64 ;; \
+        *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && dotnet publish src/PersonalPlatform.Api/PersonalPlatform.Api.csproj -c Release -o /out/app --no-restore \
     && dotnet ef migrations bundle \
         --project src/PersonalPlatform.Infrastructure/PersonalPlatform.Infrastructure.csproj \
         --startup-project src/PersonalPlatform.Infrastructure/PersonalPlatform.Infrastructure.csproj \
-        --configuration Release --self-contained --target-runtime linux-x64 \
+        --configuration Release --self-contained --target-runtime "$rid" \
         --output /out/migrator/efbundle
 
 # --- Migration job: runs once per deployment with the schema-owner credentials, never at app startup.
