@@ -133,7 +133,7 @@ public sealed class AbuseAndLeakTests(ApiTestEnvironment env)
             "api/v1/profile/reference-data", "api/{**path}",
         };
 
-        Assert.True(endpoints.Count > 15);
+        Assert.True(endpoints.Count > 60, $"only {endpoints.Count} endpoints discovered");
         using var anonymous = env.Api.CreateBareClient();
         foreach (var (route, methods) in endpoints.Where(e => !publicRoutes.Contains(e.Route)))
         {

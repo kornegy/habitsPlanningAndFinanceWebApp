@@ -154,8 +154,8 @@ public sealed class BudgetsController(BudgetService budgets) : ControllerBase
 
     [HttpGet("report")]
     [EnableRateLimiting(RateLimiting.Reports)]
-    public Task<BudgetReportDto> Report([FromQuery] MonthQuery month, CancellationToken cancellationToken) =>
-        budgets.ReportAsync(month.Year, month.Month, cancellationToken);
+    public Task<BudgetReportDto> Report([FromQuery] MonthQuery period, CancellationToken cancellationToken) =>
+        budgets.ReportAsync(period.Year, period.Month, cancellationToken);
 }
 
 [ApiController]

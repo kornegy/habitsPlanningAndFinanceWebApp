@@ -96,20 +96,33 @@ public sealed class TestUser
 
     public async Task<T> GetJsonAsync<T>(string url)
     {
-        var response = await Client.GetAsync(url).EnsureStatusAsync(HttpStatusCode.OK);
+        var response = await ExpectAsync(Client.GetAsync(url), HttpStatusCode.OK);
         return await response.ReadJsonAsync<T>();
     }
 
     public async Task<TResponse> PostJsonAsync<TRequest, TResponse>(string url, TRequest body, HttpStatusCode expected = HttpStatusCode.Created)
     {
-        var response = await PostAsync(url, body).EnsureStatusAsync(expected);
+        var response = await ExpectAsync(PostAsync(url, body), expected);
         return await response.ReadJsonAsync<TResponse>();
     }
 
     public async Task<TResponse> PutJsonAsync<TRequest, TResponse>(string url, TRequest body)
     {
-        var response = await PutAsync(url, body).EnsureStatusAsync(HttpStatusCode.OK);
+        var response = await ExpectAsync(PutAsync(url, body), HttpStatusCode.OK);
         return await response.ReadJsonAsync<TResponse>();
+    }
+
+    /// <summary>Like EnsureStatusAsync, but a server error includes the server-side exception from the captured logs.</summary>
+    private async Task<HttpResponseMessage> ExpectAsync(Task<HttpResponseMessage> request, HttpStatusCode expected)
+    {
+        var response = await request;
+        if (response.StatusCode == HttpStatusCode.InternalServerError && expected != HttpStatusCode.InternalServerError)
+        {
+            var errors = Factory.Logs.Lines.Where(l => l.StartsWith("Error", StringComparison.Ordinal)).TakeLast(2);
+            throw new HttpRequestException($"Server error. Recent server errors:\n{string.Join("\n", errors)}");
+        }
+
+        return await response.EnsureStatusAsync(expected);
     }
 }
 

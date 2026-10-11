@@ -20,8 +20,7 @@ public sealed class AccountService(IAppDbContext db, ICurrentUser currentUser, U
 
     public async Task<AccountsOverviewDto> ListAsync(bool includeArchived, CancellationToken cancellationToken)
     {
-        var accounts = await Projection(Owner)
-            .Where(a => includeArchived || !a.IsArchived)
+        var accounts = await Projection(Owner, db.Accounts.Where(a => includeArchived || a.ArchivedAt == null))
             .ToListAsync(cancellationToken);
         var totals = accounts
             .Where(a => !a.IsArchived)
@@ -33,7 +32,7 @@ public sealed class AccountService(IAppDbContext db, ICurrentUser currentUser, U
     }
 
     public async Task<AccountDto> GetAsync(Guid id, CancellationToken cancellationToken) =>
-        await Projection(Owner).FirstOrDefaultAsync(a => a.Id == id, cancellationToken)
+        await Projection(Owner, db.Accounts.Where(a => a.Id == id)).FirstOrDefaultAsync(cancellationToken)
         ?? throw new NotFoundException();
 
     public async Task<AccountDto> CreateAsync(CreateAccountRequest request, CancellationToken cancellationToken)
@@ -102,10 +101,10 @@ public sealed class AccountService(IAppDbContext db, ICurrentUser currentUser, U
             ?? throw new NotFoundException();
     }
 
-    private IQueryable<AccountDto> Projection(Guid owner)
+    private IQueryable<AccountDto> Projection(Guid owner, IQueryable<DomainAccount> accounts)
     {
         var entries = db.LedgerEntries;
-        return db.Accounts.AsNoTracking()
+        return accounts.AsNoTracking()
             .Where(a => a.OwnerId == owner)
             .OrderBy(a => a.ArchivedAt != null).ThenBy(a => a.Name).ThenBy(a => a.Id)
             .Select(a => new AccountDto(

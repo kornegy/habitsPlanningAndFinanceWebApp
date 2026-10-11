@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Net;
+using System.Text.Encodings.Web;
 using System.Text.Json.Serialization;
+using System.Text.Unicode;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -80,6 +82,9 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
             // DTOs define exactly which fields a client may set.
             o.JsonSerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow;
             o.JsonSerializerOptions.MaxDepth = 16;
+            // Escape HTML-sensitive characters (<, >, &, quotes) in all JSON output as defence in depth, while
+            // keeping non-Latin text (e.g. Cyrillic) readable.
+            o.JsonSerializerOptions.Encoder = JavaScriptEncoder.Create(UnicodeRanges.All);
             // Deserialization errors get a generic message instead of one naming internal .NET types.
             o.AllowInputFormatterExceptionMessages = false;
         });
