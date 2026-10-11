@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
-using PersonalPlatform.Contracts;
 using PersonalPlatform.Contracts.Finance;
 using PersonalPlatform.Contracts.Habits;
 using PersonalPlatform.Contracts.Notes;
