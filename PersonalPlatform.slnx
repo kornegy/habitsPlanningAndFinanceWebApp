@@ -11,5 +11,6 @@
     <Project Path="tests/PersonalPlatform.IntegrationTests/PersonalPlatform.IntegrationTests.csproj" />
     <Project Path="tests/PersonalPlatform.SecurityTests/PersonalPlatform.SecurityTests.csproj" />
     <Project Path="tests/PersonalPlatform.TestInfrastructure/PersonalPlatform.TestInfrastructure.csproj" />
+    <Project Path="tests/PersonalPlatform.UnitTests/PersonalPlatform.UnitTests.csproj" />
   </Folder>
 </Solution>

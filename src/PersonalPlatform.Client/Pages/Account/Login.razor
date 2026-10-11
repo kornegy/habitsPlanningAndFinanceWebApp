@@ -73,8 +73,5 @@
     }
 
     /// <summary>Only same-site relative paths are followed (prevents open redirects).</summary>
-    private string SafeReturnUrl() =>
-        ReturnUrl is { Length: > 1 } url && url[0] == '/' && url[1] != '/' && url[1] != '\\' && !url.Contains("://", StringComparison.Ordinal)
-            ? url.TrimStart('/')
-            : string.Empty;
+    private string SafeReturnUrl() => ReturnUrls.Sanitize(ReturnUrl);
 }
