@@ -86,6 +86,8 @@ dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.CA1305.severity = suggestion
 dotnet_diagnostic.CA1849.severity = suggestion
 dotnet_diagnostic.CA5394.severity = none              # tests may use non-crypto Random for data generation
+dotnet_diagnostic.CA2100.severity = none              # fixtures execute developer-authored SQL only (no user input)
+dotnet_diagnostic.xUnit1051.severity = none           # HTTP helpers in tests are bounded by test timeouts
 
 [**/Migrations/*.cs]
 generated_code = true

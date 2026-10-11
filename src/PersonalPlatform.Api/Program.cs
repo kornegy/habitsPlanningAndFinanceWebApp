@@ -48,7 +48,7 @@ static void ConfigureKestrel(WebApplicationBuilder builder) =>
     builder.WebHost.ConfigureKestrel(kestrel =>
     {
         kestrel.AddServerHeader = false;
-        kestrel.Limits.MaxRequestBodySize = 1024 * 1024; // 1 MB: largest legitimate payload is a 100k-char note
+        kestrel.Limits.MaxRequestBodySize = RequestBodyLimitMiddleware.MaxBodyBytes; // largest legitimate payload: a 100k-char note
         kestrel.Limits.MaxRequestHeadersTotalSize = 32 * 1024;
         kestrel.Limits.MaxRequestLineSize = 8 * 1024;
         kestrel.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(15);
@@ -74,6 +74,8 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
             // DTOs define exactly which fields a client may set.
             o.JsonSerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow;
             o.JsonSerializerOptions.MaxDepth = 16;
+            // Deserialization errors get a generic message instead of one naming internal .NET types.
+            o.AllowInputFormatterExceptionMessages = false;
         });
     services.AddProblemDetails(o => o.CustomizeProblemDetails = context =>
     {
@@ -132,9 +134,10 @@ static void ConfigureForwardedHeaders(IServiceCollection services, IConfiguratio
     var security = configuration.GetSection(SecurityOptions.SectionName).Get<SecurityOptions>() ?? new SecurityOptions();
     services.Configure<ForwardedHeadersOptions>(o =>
     {
+        // ForwardedHeadersMiddleware trusts EVERY sender when both lists are empty, so the headers are only
+        // processed when at least one trusted proxy is configured (see UseForwardedHeaders below).
         o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
         o.ForwardLimit = 1;
-        // Only explicitly configured proxies are trusted; with none configured, X-Forwarded-* is ignored.
         o.KnownProxies.Clear();
         o.KnownIPNetworks.Clear();
         foreach (var proxy in security.KnownProxies)
@@ -153,12 +156,16 @@ static void ConfigurePipeline(WebApplication app)
 {
     var security = app.Services.GetRequiredService<IOptions<SecurityOptions>>().Value;
 
-    app.UseForwardedHeaders();
+    if (security.KnownProxies.Length > 0 || security.KnownNetworks.Length > 0)
+    {
+        app.UseForwardedHeaders();
+    }
     app.UseMiddleware<CorrelationIdMiddleware>();
     app.UseMiddleware<RequestLoggingMiddleware>();
     app.UseExceptionHandler();
     app.UseStatusCodePages();
     app.UseSecurityHeaders();
+    app.UseMiddleware<RequestBodyLimitMiddleware>();
 
     app.UseRouting();
     app.UseRequestTimeouts();

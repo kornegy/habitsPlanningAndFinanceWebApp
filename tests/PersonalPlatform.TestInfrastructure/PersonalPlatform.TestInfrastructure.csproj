@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Shared fixtures: disposable PostgreSQL (Testcontainers), API host factory, test users and HTTP helpers. -->
+  <PropertyGroup>
+    <RootNamespace>PersonalPlatform.TestInfrastructure</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PersonalPlatform.Api\PersonalPlatform.Api.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="xunit.v3.extensibility.core" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\deploy\postgres\roles.sql" Link="roles.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
