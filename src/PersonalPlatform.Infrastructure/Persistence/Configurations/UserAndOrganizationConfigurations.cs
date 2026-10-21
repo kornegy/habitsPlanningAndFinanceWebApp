@@ -10,7 +10,7 @@ internal sealed class UserProfileConfiguration : IEntityTypeConfiguration<UserPr
 {
     public void Configure(EntityTypeBuilder<UserProfile> b)
     {
-        b.ToTable("user_profiles");
+        b.ToTable("user_profiles", t => t.HasCheckConstraint("ck_user_profiles_theme", "theme BETWEEN 0 AND 2"));
         b.HasKey(p => p.OwnerId);
         b.HasOwner();
         b.Property(p => p.DisplayName).HasMaxLength(UserProfile.DisplayNameMaxLength);

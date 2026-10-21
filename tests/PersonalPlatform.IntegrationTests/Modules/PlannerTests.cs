@@ -32,7 +32,7 @@ public sealed class PlannerTests(ApiTestEnvironment env)
         var user = await env.CreateUserAsync();
         var profile = await user.GetJsonAsync<ProfileDto>("/api/v1/profile");
         await user.PutJsonAsync<UpdateProfileRequest, ProfileDto>("/api/v1/profile", new(
-            profile.DisplayName, profile.TimeZoneId, profile.Locale, profile.CurrencyCode, profile.DateFormat, profile.FirstDayOfWeek, false, profile.Version));
+            profile.DisplayName, profile.TimeZoneId, profile.Locale, profile.CurrencyCode, profile.DateFormat, profile.FirstDayOfWeek, false, profile.Theme, profile.Version));
         var start = new DateTimeOffset(2026, 11, 3, 9, 0, 0, TimeSpan.Zero);
 
         var responses = await Task.WhenAll(Enumerable.Range(0, 6).Select(i =>

@@ -3,7 +3,7 @@ using PersonalPlatform.Contracts.Profile;
 namespace PersonalPlatform.Client.Services;
 
 /// <summary>The signed-in user's preferences, loaded from the API after sign-in and cleared on sign-out.</summary>
-public sealed class UserContext(ApiClient api, Loc loc)
+public sealed class UserContext(ApiClient api, Loc loc, ThemeService theme)
 {
     public ProfileDto? Profile { get; private set; }
 
@@ -23,12 +23,14 @@ public sealed class UserContext(ApiClient api, Loc loc)
     {
         Profile = profile;
         loc.Apply(profile, Reference?.Currencies);
+        _ = theme.ApplyAsync(profile.Theme);
         Changed?.Invoke();
     }
 
     public void Clear()
     {
         Profile = null;
+        _ = theme.ApplyAsync(ThemePreference.System);
         Changed?.Invoke();
     }
 }

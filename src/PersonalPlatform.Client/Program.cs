@@ -19,6 +19,7 @@ builder.Services.AddSingleton(sp => new HttpClient(new BearerHandler(sp.GetRequi
 });
 builder.Services.AddSingleton<ApiClient>();
 builder.Services.AddSingleton<Loc>();
+builder.Services.AddSingleton<ThemeService>();
 builder.Services.AddSingleton<UserContext>();
 builder.Services.AddSingleton<ToastService>();
 builder.Services.AddSingleton<DraftStore>();

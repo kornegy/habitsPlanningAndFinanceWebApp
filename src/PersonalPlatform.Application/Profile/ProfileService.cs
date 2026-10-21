@@ -33,6 +33,7 @@ public sealed class ProfileService(IAppDbContext db, ICurrentUser currentUser, U
             (Domain.Users.DateFormatPreference)request.DateFormat,
             request.FirstDayOfWeek,
             request.AllowOverlappingTimeBlocks,
+            (Domain.Users.ThemePreference)request.Theme,
             clock.UtcNow);
         await db.SaveChangesAsync(cancellationToken);
         clock.Invalidate();
@@ -59,6 +60,7 @@ public sealed class ProfileService(IAppDbContext db, ICurrentUser currentUser, U
         (Contracts.Profile.DateFormatPreference)profile.DateFormat,
         profile.FirstDayOfWeek,
         profile.AllowOverlappingTimeBlocks,
+        (Contracts.Profile.ThemePreference)profile.Theme,
         today,
         profile.Version);
 }

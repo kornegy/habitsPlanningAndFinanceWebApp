@@ -1,3 +1,4 @@
+@implements IDisposable
 <NavLink class="nav-item" href="" Match="NavLinkMatch.All"><Icon Name="home" />@L["Главная", "Home"]</NavLink>
 <NavLink class="nav-item" href="tasks"><Icon Name="tasks" />@L["Задачи", "Tasks"]</NavLink>
 <NavLink class="nav-item" href="habits"><Icon Name="habits" />@L["Привычки", "Habits"]</NavLink>
@@ -5,3 +6,12 @@
 <NavLink class="nav-item" href="finance"><Icon Name="wallet" />@L["Финансы", "Finance"]</NavLink>
 <NavLink class="nav-item" href="notes"><Icon Name="note" />@L["Заметки", "Notes"]</NavLink>
 <NavLink class="nav-item" href="journal"><Icon Name="book" />@L["Дневник", "Journal"]</NavLink>
+
+@code {
+    // A component without parameters is not re-rendered with its parent, so it follows language changes itself.
+    protected override void OnInitialized() => L.Changed += Refresh;
+
+    public void Dispose() => L.Changed -= Refresh;
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+}

@@ -10,6 +10,14 @@ public enum DateFormatPreference
     Iso = 2,          // 2026-12-31
 }
 
+/// <summary>Colour scheme of the interface. <see cref="System"/> follows the operating system setting.</summary>
+public enum ThemePreference
+{
+    System = 0,
+    Light = 1,
+    Dark = 2,
+}
+
 /// <summary>Per-user preferences. One row per user; the primary key equals the owner id.</summary>
 public sealed class UserProfile : IOwnedEntity
 {
@@ -28,7 +36,7 @@ public sealed class UserProfile : IOwnedEntity
     {
         OwnerId = ownerId;
         CreatedAt = now;
-        Update(displayName, timeZoneId, locale, currencyCode, DateFormatPreference.DayMonthYear, DayOfWeek.Monday, allowOverlappingTimeBlocks: true, now);
+        Update(displayName, timeZoneId, locale, currencyCode, DateFormatPreference.DayMonthYear, DayOfWeek.Monday, allowOverlappingTimeBlocks: true, ThemePreference.System, now);
     }
 
     public Guid OwnerId { get; private set; }
@@ -50,6 +58,8 @@ public sealed class UserProfile : IOwnedEntity
     /// <summary>When false, the planner rejects time blocks that overlap existing ones.</summary>
     public bool AllowOverlappingTimeBlocks { get; private set; } = true;
 
+    public ThemePreference Theme { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
 
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -64,6 +74,7 @@ public sealed class UserProfile : IOwnedEntity
         DateFormatPreference dateFormat,
         DayOfWeek firstDayOfWeek,
         bool allowOverlappingTimeBlocks,
+        ThemePreference theme,
         DateTimeOffset now)
     {
         Rule.Require(TimeZones.IsSupported(timeZoneId), "invalid_time_zone", "Unknown time zone.");
@@ -71,6 +82,7 @@ public sealed class UserProfile : IOwnedEntity
         Rule.Require(Currencies.IsSupported(currencyCode), "invalid_currency", "Unsupported currency.");
         Rule.Require(Enum.IsDefined(dateFormat), "invalid_date_format", "Unknown date format.");
         Rule.Require(firstDayOfWeek is DayOfWeek.Monday or DayOfWeek.Sunday, "invalid_first_day", "Week must start on Monday or Sunday.");
+        Rule.Require(Enum.IsDefined(theme), "invalid_theme", "Unknown theme.");
 
         DisplayName = Rule.OptionalText(displayName, DisplayNameMaxLength, "invalid_display_name", "Display name") ?? string.Empty;
         TimeZoneId = timeZoneId;
@@ -79,6 +91,7 @@ public sealed class UserProfile : IOwnedEntity
         DateFormat = dateFormat;
         FirstDayOfWeek = firstDayOfWeek;
         AllowOverlappingTimeBlocks = allowOverlappingTimeBlocks;
+        Theme = theme;
         UpdatedAt = now;
     }
 

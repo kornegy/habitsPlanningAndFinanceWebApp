@@ -1,0 +1,80 @@
+using Microsoft.Playwright;
+
+namespace PersonalPlatform.E2ETests;
+
+/// <summary>Interface behaviour: popover dismissal, live language switch, colour theme and wide screens.</summary>
+public sealed class InterfaceTests(BrowserEnvironment env)
+{
+    [Fact]
+    public async Task Popovers_close_on_outside_click_and_escape()
+    {
+        await using var session = await BrowserSession.StartAsync(env, nameof(Popovers_close_on_outside_click_and_escape));
+        await session.SignInAsNewUserAsync();
+        var page = session.Page;
+        var topbar = page.Locator(".topbar");
+
+        await topbar.GetByRole(AriaRole.Button, new() { Name = "Добавить" }).ClickAsync();
+        await Assertions.Expect(page.Locator(".popover-menu")).ToBeVisibleAsync();
+        await page.Mouse.ClickAsync(640, 600);
+        await Assertions.Expect(page.Locator(".popover")).ToHaveCountAsync(0);
+
+        await topbar.GetByRole(AriaRole.Button, new() { Name = "Напоминания" }).ClickAsync();
+        await Assertions.Expect(page.Locator(".popover")).ToHaveCountAsync(1);
+        await page.Keyboard.PressAsync("Escape");
+        await Assertions.Expect(page.Locator(".popover")).ToHaveCountAsync(0);
+
+        session.AssertHealthy();
+    }
+
+    [Fact]
+    public async Task Language_change_updates_navigation_without_reload()
+    {
+        await using var session = await BrowserSession.StartAsync(env, nameof(Language_change_updates_navigation_without_reload));
+        await session.SignInAsNewUserAsync();
+        var page = session.Page;
+
+        await page.GotoAsync(session.Url("settings"));
+        await page.GetByLabel("Язык").SelectOptionAsync("en-US");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Сохранить" }).ClickAsync();
+
+        var sidebar = page.Locator(".sidebar");
+        await Assertions.Expect(sidebar.GetByRole(AriaRole.Link, new() { Name = "Tasks" })).ToBeVisibleAsync();
+        await Assertions.Expect(sidebar.GetByRole(AriaRole.Link, new() { Name = "Задачи" })).ToHaveCountAsync(0);
+        await Assertions.Expect(page.Locator(".topbar").GetByRole(AriaRole.Button, new() { Name = "Add" })).ToBeVisibleAsync();
+
+        session.AssertHealthy();
+    }
+
+    [Fact]
+    public async Task Dark_theme_is_saved_in_the_profile_and_restored_after_reload()
+    {
+        await using var session = await BrowserSession.StartAsync(env, nameof(Dark_theme_is_saved_in_the_profile_and_restored_after_reload));
+        await session.SignInAsNewUserAsync();
+        var page = session.Page;
+        var html = page.Locator("html");
+
+        await page.GotoAsync(session.Url("settings"));
+        await page.GetByLabel("Тема оформления").SelectOptionAsync("Dark");
+        await Assertions.Expect(html).ToHaveAttributeAsync("data-theme", "dark");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Сохранить" }).ClickAsync();
+        await Assertions.Expect(page.GetByText("Настройки сохранены")).ToBeVisibleAsync();
+
+        await page.ReloadAsync();
+        await Assertions.Expect(html).ToHaveAttributeAsync("data-theme", "dark");
+        Assert.Equal("rgb(22, 23, 21)", await page.EvaluateAsync<string>("() => getComputedStyle(document.body).backgroundColor"));
+
+        session.AssertHealthy();
+    }
+
+    [Fact]
+    public async Task Pages_use_the_full_width_of_large_monitors()
+    {
+        await using var session = await BrowserSession.StartAsync(env, nameof(Pages_use_the_full_width_of_large_monitors), new ViewportSize { Width = 2560, Height = 1440 });
+        await session.SignInAsNewUserAsync();
+
+        var width = await session.Page.EvaluateAsync<double>("() => document.querySelector('.page').getBoundingClientRect().width");
+
+        Assert.True(width > 2000, $"Page content is only {width}px wide on a 2560px screen.");
+        Assert.True(await session.Page.EvaluateAsync<bool>("() => document.documentElement.scrollWidth <= window.innerWidth"));
+    }
+}

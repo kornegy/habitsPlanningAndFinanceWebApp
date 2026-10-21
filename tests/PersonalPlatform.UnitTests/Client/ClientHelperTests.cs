@@ -105,5 +105,5 @@ public sealed class LocTests
     }
 
     private static ProfileDto Profile(string locale, DateFormatPreference format, DayOfWeek firstDay, string zone) =>
-        new("user@example.test", "Test", zone, locale, "RUB", format, firstDay, false, new DateOnly(2026, 3, 11), 1);
+        new("user@example.test", "Test", zone, locale, "RUB", format, firstDay, false, ThemePreference.System, new DateOnly(2026, 3, 11), 1);
 }

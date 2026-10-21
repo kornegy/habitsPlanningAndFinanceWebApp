@@ -3,7 +3,7 @@
 @inject ApiClient Api
 @inject ToastService Toasts
 
-<div class="popover-anchor">
+<div class="popover-anchor" @onkeydown="OnKeyDown">
     <button type="button" class="icon-button" aria-expanded="@_open" aria-haspopup="true" @onclick="() => _open = !_open"
             aria-label="@(_reminders.Count == 0 ? L["Напоминания", "Reminders"] : L[$"Напоминания: {_reminders.Count}", $"Reminders: {_reminders.Count}"])">
         <Icon Name="bell" />
@@ -14,6 +14,8 @@
     </button>
     @if (_open)
     {
+        @* Invisible full-screen layer under the popover: a click anywhere else closes it. *@
+        <div class="popover-backdrop" @onclick="() => _open = false"></div>
         <div class="popover" role="region" aria-label="@L["Напоминания", "Reminders"]">
             @if (_reminders.Count == 0)
             {
@@ -46,7 +48,22 @@
     private bool _open;
     private HashSet<(ReminderKind, Guid)> _announced = [];
 
-    protected override void OnInitialized() => _ = PollAsync();
+    protected override void OnInitialized()
+    {
+        // No parameters, so the component is not re-rendered by its parent: follow language changes directly.
+        L.Changed += Refresh;
+        _ = PollAsync();
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            _open = false;
+        }
+    }
 
     private async Task PollAsync()
     {
@@ -105,6 +122,7 @@
 
     public ValueTask DisposeAsync()
     {
+        L.Changed -= Refresh;
         _stop.Cancel();
         _stop.Dispose();
         return ValueTask.CompletedTask;

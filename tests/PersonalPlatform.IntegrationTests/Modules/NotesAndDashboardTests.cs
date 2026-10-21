@@ -153,6 +153,36 @@ public sealed class NotesAndDashboardTests(ApiTestEnvironment env)
     }
 
     [Fact]
+    public async Task Theme_preference_is_saved_in_the_profile_and_validated()
+    {
+        var user = await env.CreateUserAsync();
+        var profile = await user.GetJsonAsync<ProfileDto>("/api/v1/profile");
+        Assert.Equal(ThemePreference.System, profile.Theme);
+
+        var saved = await user.PutJsonAsync<UpdateProfileRequest, ProfileDto>("/api/v1/profile", new(
+            profile.DisplayName, profile.TimeZoneId, profile.Locale, profile.CurrencyCode, profile.DateFormat, profile.FirstDayOfWeek,
+            profile.AllowOverlappingTimeBlocks, ThemePreference.Dark, profile.Version));
+
+        Assert.Equal(ThemePreference.Dark, saved.Theme);
+        Assert.Equal(ThemePreference.Dark, (await user.GetJsonAsync<ProfileDto>("/api/v1/profile")).Theme);
+
+        // An undefined value is rejected by validation rather than stored.
+        var invalid = await user.PutAsync("/api/v1/profile", new
+        {
+            displayName = saved.DisplayName,
+            timeZoneId = saved.TimeZoneId,
+            locale = saved.Locale,
+            currencyCode = saved.CurrencyCode,
+            dateFormat = saved.DateFormat,
+            firstDayOfWeek = saved.FirstDayOfWeek,
+            allowOverlappingTimeBlocks = saved.AllowOverlappingTimeBlocks,
+            theme = 7,
+            version = saved.Version,
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    [Fact]
     public async Task Reminders_list_due_task_reminders_until_dismissed()
     {
         var user = await env.CreateUserAsync();

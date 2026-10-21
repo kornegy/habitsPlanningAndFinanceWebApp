@@ -6,6 +6,8 @@
 @inject UserContext User
 @inject AuthSession Session
 @inject ToastService Toasts
+@inject ThemeService Theme
+@implements IDisposable
 
 <PageTitle>@L["Настройки", "Settings"]</PageTitle>
 <div class="page-header"><h1>@L["Настройки", "Settings"]</h1></div>
@@ -62,8 +64,17 @@
                         <option value="@DayOfWeek.Sunday">@L["С воскресенья", "Sunday"]</option>
                     </select>
                 </label>
-                <label class="checkbox"><input type="checkbox" @bind="_allowOverlaps" /> @L["Разрешить пересечение блоков в планировщике", "Allow overlapping planner blocks"]</label>
+                <label class="field">
+                    <span>@L["Тема оформления", "Theme"]</span>
+                    @* The choice is previewed immediately and kept only when the profile is saved. *@
+                    <select @bind="_theme" @bind:after="PreviewThemeAsync">
+                        <option value="@ThemePreference.System">@L["Как в системе", "System"]</option>
+                        <option value="@ThemePreference.Light">@L["Светлая", "Light"]</option>
+                        <option value="@ThemePreference.Dark">@L["Тёмная", "Dark"]</option>
+                    </select>
+                </label>
             </div>
+            <label class="checkbox"><input type="checkbox" @bind="_allowOverlaps" /> @L["Разрешить пересечение блоков в планировщике", "Allow overlapping planner blocks"]</label>
             <ErrorText Error="_profileError" />
             <div><button type="submit" class="button button-primary">@L["Сохранить", "Save"]</button></div>
         </form>
@@ -150,6 +161,7 @@
     private DateFormatPreference _dateFormat;
     private DayOfWeek _firstDay;
     private bool _allowOverlaps;
+    private ThemePreference _theme;
     private ApiException? _profileError;
     private List<CategoryDto> _categories = [];
     private List<TagDto> _tags = [];
@@ -176,6 +188,7 @@
             _dateFormat = p.DateFormat;
             _firstDay = p.FirstDayOfWeek;
             _allowOverlaps = p.AllowOverlappingTimeBlocks;
+            _theme = p.Theme;
         }
 
         await LoadOrganizationAsync();
@@ -196,13 +209,24 @@
         try
         {
             var saved = await Api.PutAsync<ProfileDto>("/api/v1/profile", new UpdateProfileRequest(
-                _displayName, _timeZone, _locale, _currency, _dateFormat, _firstDay, _allowOverlaps, User.Profile!.Version));
+                _displayName, _timeZone, _locale, _currency, _dateFormat, _firstDay, _allowOverlaps, _theme, User.Profile!.Version));
             User.Set(saved);
             Toasts.Success(L["Настройки сохранены", "Settings saved"]);
         }
         catch (ApiException ex)
         {
             _profileError = ex.IsConflict ? new ApiException(ex.Status, ex.Code, L["Настройки изменены в другом окне. Обновите страницу.", "Settings were changed in another window. Reload the page."]) : ex;
+        }
+    }
+
+    private Task PreviewThemeAsync() => Theme.ApplyAsync(_theme);
+
+    public void Dispose()
+    {
+        // Leaving without saving drops the preview and restores the saved theme.
+        if (User.Profile is { } saved && Theme.Current != saved.Theme)
+        {
+            _ = Theme.ApplyAsync(saved.Theme);
         }
     }
 

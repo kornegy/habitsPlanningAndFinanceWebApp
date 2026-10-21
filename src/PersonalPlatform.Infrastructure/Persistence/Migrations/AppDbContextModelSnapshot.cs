@@ -19,7 +19,7 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("app")
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -180,7 +180,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Finance.Account", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -249,7 +248,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Finance.Budget", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -313,7 +311,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Finance.FinanceCategory", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -377,7 +374,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Finance.FinancialTransaction", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -510,7 +506,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Finance.LedgerEntry", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -567,7 +562,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Finance.RecurringTransaction", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -675,7 +669,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Habits.Habit", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -770,7 +763,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Habits.HabitCompletion", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -809,7 +801,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Notes.JournalEntry", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -872,7 +863,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Notes.Note", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -940,7 +930,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Notes.NoteRevision", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1015,7 +1004,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Organization.Category", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1066,7 +1054,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Organization.Tag", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1106,7 +1093,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Planner.TimeBlock", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1173,7 +1159,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Tasks.Subtask", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1214,7 +1199,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Tasks.TaskItem", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1322,7 +1306,6 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("PersonalPlatform.Domain.Tasks.TaskSeries", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1479,6 +1462,10 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("locale");
 
+                    b.Property<int>("Theme")
+                        .HasColumnType("integer")
+                        .HasColumnName("theme");
+
                     b.Property<string>("TimeZoneId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -1498,7 +1485,10 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
                     b.HasKey("OwnerId")
                         .HasName("pk_user_profiles");
 
-                    b.ToTable("user_profiles", "app");
+                    b.ToTable("user_profiles", "app", t =>
+                        {
+                            t.HasCheckConstraint("ck_user_profiles_theme", "theme BETWEEN 0 AND 2");
+                        });
                 });
 
             modelBuilder.Entity("PersonalPlatform.Infrastructure.Identity.AppRole", b =>

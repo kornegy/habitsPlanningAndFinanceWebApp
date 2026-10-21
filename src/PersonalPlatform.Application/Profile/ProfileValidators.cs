@@ -14,6 +14,7 @@ public sealed class UpdateProfileRequestValidator : AbstractValidator<UpdateProf
         RuleFor(x => x.Locale).NotEmpty().Must(l => UserProfile.SupportedLocales.Contains(l)).WithMessage("Unsupported locale.");
         RuleFor(x => x.CurrencyCode).NotEmpty().Must(Currencies.IsSupported).WithMessage("Unsupported currency.");
         RuleFor(x => x.DateFormat).IsInEnum();
+        RuleFor(x => x.Theme).IsInEnum();
         RuleFor(x => x.FirstDayOfWeek).Must(d => d is DayOfWeek.Monday or DayOfWeek.Sunday).WithMessage("Week must start on Monday or Sunday.");
     }
 }

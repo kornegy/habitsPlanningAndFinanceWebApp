@@ -200,6 +200,8 @@ public sealed class EnumMappingTests
         { typeof(C.Finance.CategoryKind), typeof(D.Finance.CategoryKind) },
         { typeof(C.Finance.TransactionKind), typeof(D.Finance.TransactionKind) },
         { typeof(C.Finance.BudgetState), typeof(D.Finance.BudgetState) },
+        { typeof(C.Profile.ThemePreference), typeof(D.Users.ThemePreference) },
+        { typeof(C.Profile.DateFormatPreference), typeof(D.Users.DateFormatPreference) },
     };
 
     /// <summary>EnumMapping casts by value, so contract and domain enums must stay identical.</summary>

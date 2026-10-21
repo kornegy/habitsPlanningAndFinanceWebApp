@@ -84,7 +84,7 @@ public sealed class TimeZoneTests
 
     private static void Update(UserProfile profile, string zone = "UTC", string locale = "ru-RU", string currency = "RUB",
         DayOfWeek firstDay = DayOfWeek.Monday, DateFormatPreference format = default) =>
-        profile.Update("Test", zone, locale, currency, format, firstDay, false, DateTimeOffset.UtcNow);
+        profile.Update("Test", zone, locale, currency, format, firstDay, false, ThemePreference.System, DateTimeOffset.UtcNow);
 
     private static string Code(Action action) => Assert.Throws<DomainRuleException>(action).Code;
 }

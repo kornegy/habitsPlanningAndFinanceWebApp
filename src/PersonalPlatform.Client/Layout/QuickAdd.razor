@@ -3,13 +3,16 @@
 @inject ToastService Toasts
 @inject NavigationManager Navigation
 @inject AppEvents Events
+@implements IDisposable
 
-<div class="popover-anchor">
+<div class="popover-anchor" @onkeydown="OnKeyDown">
     <button type="button" class="button button-primary" aria-haspopup="true" aria-expanded="@_menu" @onclick="() => _menu = !_menu">
         <Icon Name="plus" /><span class="hide-mobile">@L["Добавить", "Add"]</span>
     </button>
     @if (_menu)
     {
+        @* Invisible full-screen layer under the menu: a click anywhere else closes it. *@
+        <div class="popover-backdrop" @onclick="() => _menu = false"></div>
         <div class="popover popover-menu" role="menu">
             <button type="button" class="menu-item" role="menuitem" @onclick="OpenTask"><Icon Name="tasks" />@L["Задача", "Task"]</button>
             <button type="button" class="menu-item" role="menuitem" @onclick='() => Go("notes?new=1")'><Icon Name="note" />@L["Заметка", "Note"]</button>
@@ -43,6 +46,21 @@
     private bool _today = true;
     private string _title = string.Empty;
     private ApiException? _error;
+
+    // No parameters, so the component is not re-rendered by its parent: follow language changes directly.
+    protected override void OnInitialized() => L.Changed += Refresh;
+
+    public void Dispose() => L.Changed -= Refresh;
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            _menu = false;
+        }
+    }
 
     private void OpenTask()
     {
