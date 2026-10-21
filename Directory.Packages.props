@@ -1,7 +1,10 @@
 <Project>
-  <!-- Versions verified against nuget.org on 2026-10-11 (latest stable, matching the 10.0.12 runtime). -->
+  <!-- Versions verified against nuget.org on 2026-10-21 (latest stable; 10.0.13 is the October 2026 security servicing release). -->
   <PropertyGroup>
-    <AspNetCoreVersion>10.0.12</AspNetCoreVersion>
+    <AspNetCoreVersion>10.0.13</AspNetCoreVersion>
+    <!-- Versions listed here also apply to transitive dependencies, so a vulnerable transitive package can be
+         lifted without waiting for its parent to release. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
     <!-- Data -->
@@ -29,6 +32,9 @@
     <!-- Application -->
     <PackageVersion Include="FluentValidation" Version="12.2.0" />
     <PackageVersion Include="MailKit" Version="4.18.1" />
+    <!-- Transitive pin: MimeKit 4.18.2 moves System.Security.Cryptography.Pkcs to 10.0.13
+         (GHSA-846f-f764-76mx, GHSA-2fmv-rv2c-59x7); MailKit 4.18.1 still references MimeKit 4.18.1. -->
+    <PackageVersion Include="MimeKit" Version="4.18.2" />
 
     <!-- Tests -->
     <PackageVersion Include="xunit.v3" Version="4.0.2" />

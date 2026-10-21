@@ -34,15 +34,26 @@ jobs:
           path: tests/PersonalPlatform.E2ETests/bin/Release/net10.0/playwright-traces/**
 
   dast:
-    name: OWASP ZAP baseline
+    name: Published stack smoke test and OWASP ZAP baseline
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
       - name: Start disposable stack
         run: |
           ./deploy/scripts/generate-dev-env.sh
           docker compose up -d --build --wait app
+      - name: Smoke test the published (trimmed) client in a browser
+        env:
+          PP_SMOKE_BASE_URL: http://localhost:8080
+          PP_SMOKE_MAILPIT_URL: http://localhost:8025
+        run: |
+          dotnet build tests/PersonalPlatform.E2ETests -c Release
+          pwsh tests/PersonalPlatform.E2ETests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+          dotnet test -c Release --no-build --project tests/PersonalPlatform.E2ETests -- --filter-class "*PublishedStackSmokeTests"
       - name: ZAP baseline scan (passive; any WARN or FAIL not ignored in deploy/zap/rules.tsv fails the job)
         run: |
           # The ZAP container runs as its own user and writes its report into the mounted directory.

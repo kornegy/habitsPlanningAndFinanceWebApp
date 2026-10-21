@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace PersonalPlatform.Client.Services;
 
@@ -10,7 +11,12 @@ public static class ApiJson
 
     private static JsonSerializerOptions Create()
     {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            // Source-generated metadata first (survives trimming); reflection only for incidental shapes such as
+            // the empty body object, which have no constructor parameters.
+            TypeInfoResolver = JsonTypeInfoResolver.Combine(ClientJsonContext.Default, new DefaultJsonTypeInfoResolver()),
+        };
         options.Converters.Add(new JsonStringEnumConverter());
         return options;
     }

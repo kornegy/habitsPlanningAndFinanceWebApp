@@ -2,9 +2,9 @@
 # Multi-stage build for the Personal Platform API (which also serves the Blazor WebAssembly client)
 # and the EF Core migration bundle. Base images are pinned by digest; update them deliberately.
 
-ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317
-ARG ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0@sha256:222759b391a1aaf241166672c8f99b2d4ada452e7b5319f3c6e8f265a37b5ad4
-ARG RUNTIME_DEPS_IMAGE=mcr.microsoft.com/dotnet/runtime-deps:10.0@sha256:12dd273c196e92aa91542749b8df0996f497f812811abba9e6613b484f681dd0
+ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa
+ARG ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0@sha256:d5633778c754e89a386882eddf8dbee6942447a8a4b8267c19cf1e1158d0b0ac
+ARG RUNTIME_DEPS_IMAGE=mcr.microsoft.com/dotnet/runtime-deps:10.0@sha256:da5846024d0008b48259b53a8953d39381fe5b7ec99ef1449ba4ba927f201490
 
 # The SDK stage runs on the build machine natively and cross-targets the requested platform.
 FROM --platform=$BUILDPLATFORM ${SDK_IMAGE} AS build
