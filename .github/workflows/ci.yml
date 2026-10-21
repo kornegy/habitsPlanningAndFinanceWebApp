@@ -60,7 +60,7 @@ jobs:
           cat coverage/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
       - name: Coverage gate (Domain, Application, Infrastructure >= 90% lines)
         run: python3 deploy/ci/check-coverage.py coverage/Cobertura.xml 0.90
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results
@@ -155,7 +155,7 @@ jobs:
           docker run --rm -v "$PWD/sbom:/out" anchore/syft:v1.54.1-nonroot \
             docker-archive:/out/image.tar -o cyclonedx-json=/out/sbom.cdx.json
           rm sbom/image.tar
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom/sbom.cdx.json
