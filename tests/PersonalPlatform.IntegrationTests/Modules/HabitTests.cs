@@ -122,6 +122,40 @@ public sealed class HabitTests(ApiTestEnvironment env)
         Assert.Equal(HttpStatusCode.NotFound, (await user.GetAsync($"/api/v1/habits/{habit.Id}")).StatusCode);
     }
 
+    [Fact]
+    public async Task Reset_removes_check_offs_and_restarts_active_habits_from_today()
+    {
+        var user = await env.CreateUserAsync();
+        var today = await TodayAsync(user);
+        var first = await CreateDailyAsync(user, today.AddDays(-10));
+        var second = await CreateDailyAsync(user, today.AddDays(-10));
+        var archived = await CreateDailyAsync(user, today.AddDays(-10));
+        foreach (var habit in new[] { first, second, archived })
+        {
+            foreach (var offset in new[] { 2, 1, 0 })
+            {
+                await user.PutAsync($"/api/v1/habits/{habit.Id}/completions/{today.AddDays(-offset):yyyy-MM-dd}", new { }).EnsureStatusAsync(HttpStatusCode.OK);
+            }
+        }
+
+        await user.PostAsync($"/api/v1/habits/{archived.Id}/archive", new SetArchivedRequest(true)).EnsureStatusAsync(HttpStatusCode.OK);
+
+        var single = await user.PostJsonAsync<object, HabitResetResult>($"/api/v1/habits/{first.Id}/reset", new { }, HttpStatusCode.OK);
+        Assert.Equal(new HabitResetResult(1, 3), single);
+        var afterSingle = await user.GetJsonAsync<HabitDto>($"/api/v1/habits/{first.Id}");
+        Assert.Equal((today, 0, false), (afterSingle.StartDate, afterSingle.CurrentStreak, afterSingle.CompletedToday));
+        Assert.Equal(3, (await user.GetJsonAsync<HabitDto>($"/api/v1/habits/{second.Id}")).CurrentStreak);
+        Assert.Equal("date_before_start", await (await user.PutAsync($"/api/v1/habits/{first.Id}/completions/{today.AddDays(-1):yyyy-MM-dd}", new { })).ProblemCodeAsync());
+
+        var all = await user.PostJsonAsync<object, HabitResetResult>("/api/v1/habits/reset", new { }, HttpStatusCode.OK);
+        Assert.Equal(new HabitResetResult(2, 3), all); // first (already empty) and second; the archived habit keeps its history
+        var stats = await user.GetJsonAsync<HabitStatsDto>($"/api/v1/habits/{second.Id}/stats?from={today.AddDays(-10):yyyy-MM-dd}&to={today:yyyy-MM-dd}");
+        Assert.Equal((0, 0, 0), (stats.Completed, stats.Scheduled, stats.CurrentStreak)); // days before the reset are no longer counted as missed
+        Assert.Equal(3, (await user.GetJsonAsync<HabitDto>($"/api/v1/habits/{archived.Id}")).LongestStreak);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await user.PostAsync($"/api/v1/habits/{Guid.NewGuid()}/reset", new { })).StatusCode);
+    }
+
     private static Task<HabitDto> CreateDailyAsync(TestUser user, DateOnly start) =>
         user.PostJsonAsync<CreateHabitRequest, HabitDto>("/api/v1/habits", new("Read", null, null, null, HabitScheduleType.Daily, Weekdays.None, 1, start, null, null));
 

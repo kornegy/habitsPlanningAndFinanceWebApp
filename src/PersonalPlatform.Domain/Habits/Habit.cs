@@ -85,6 +85,20 @@ public sealed class Habit : IOwnedEntity
         UpdatedAt = now;
     }
 
+    /// <summary>
+    /// Starts tracking anew from <paramref name="today"/>: used together with deleting all completions, so the
+    /// statistics do not count the days before the reset as missed. A start date already in the future is kept.
+    /// </summary>
+    public void Restart(DateOnly today, DateTimeOffset now)
+    {
+        if (StartDate < today)
+        {
+            StartDate = today;
+        }
+
+        UpdatedAt = now;
+    }
+
     public void Archive(DateTimeOffset now)
     {
         ArchivedAt ??= now;

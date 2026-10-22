@@ -40,6 +40,14 @@ public sealed class HabitsController(HabitService habits) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Removes the check-offs of all active habits and restarts them from today.</summary>
+    [HttpPost("reset")]
+    public Task<HabitResetResult> ResetAll(CancellationToken cancellationToken) => habits.ResetAsync(null, cancellationToken);
+
+    /// <summary>Removes the check-offs of one habit and restarts it from today.</summary>
+    [HttpPost("{id:guid}/reset")]
+    public Task<HabitResetResult> Reset(Guid id, CancellationToken cancellationToken) => habits.ResetAsync(id, cancellationToken);
+
     /// <summary>Checks the habit off for a local date (idempotent).</summary>
     [HttpPut("{id:guid}/completions/{date}")]
     public Task<HabitCompletionResult> Complete(Guid id, DateOnly date, CancellationToken cancellationToken) =>

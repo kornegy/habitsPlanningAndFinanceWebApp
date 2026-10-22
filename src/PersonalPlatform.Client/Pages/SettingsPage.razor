@@ -89,7 +89,7 @@
             <option value="@CategoryScope.Task">@L["Задачи", "Tasks"]</option>
             <option value="@CategoryScope.Habit">@L["Привычки", "Habits"]</option>
         </select>
-        <input type="color" @bind="_categoryColor" aria-label="@L["Цвет", "Colour"]" />
+        <ColorPicker @bind-Value="_categoryColor" Label="@L["Цвет", "Colour"]" />
         <button type="submit" class="button"><Icon Name="plus" />@L["Добавить", "Add"]</button>
     </form>
     <ul class="list">

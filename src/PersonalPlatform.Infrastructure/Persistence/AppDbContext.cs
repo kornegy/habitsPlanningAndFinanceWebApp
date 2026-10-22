@@ -62,6 +62,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ICurren
 
     public DbSet<HabitCompletion> HabitCompletions => Set<HabitCompletion>();
 
+    public DbSet<QuitHabit> QuitHabits => Set<QuitHabit>();
+
+    public DbSet<QuitHabitRelapse> QuitHabitRelapses => Set<QuitHabitRelapse>();
+
     public DbSet<TimeBlock> TimeBlocks => Set<TimeBlock>();
 
     public DbSet<Account> Accounts => Set<Account>();

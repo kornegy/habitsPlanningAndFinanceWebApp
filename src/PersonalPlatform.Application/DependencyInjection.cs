@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<OrganizationService>();
         services.AddScoped<TaskService>();
         services.AddScoped<HabitService>();
+        services.AddScoped<QuitHabitService>();
         services.AddScoped<PlannerService>();
         services.AddScoped<AccountService>();
         services.AddScoped<FinanceCategoryService>();

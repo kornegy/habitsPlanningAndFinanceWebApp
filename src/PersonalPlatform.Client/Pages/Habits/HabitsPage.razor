@@ -10,9 +10,14 @@
     <h1>@L["Привычки", "Habits"]</h1>
     <div class="row">
         <label class="checkbox small"><input type="checkbox" @bind="_showArchived" @bind:after="LoadAsync" /> @L["Архив", "Archived"]</label>
+        @if (_habits is { Count: > 0 })
+        {
+            <button type="button" class="button" @onclick="() => _resetting = true"><Icon Name="repeat" />@L["Начать заново", "Start over"]</button>
+        }
         <button type="button" class="button button-primary" @onclick="() => Edit(null)"><Icon Name="plus" />@L["Новая привычка", "New habit"]</button>
     </div>
 </div>
+<HabitTabs />
 
 @if (_habits is null)
 {
@@ -66,8 +71,13 @@ else
 <ConfirmDialog Open="_deleting is not null" OpenChanged="v => { if (!v) _deleting = null; }" Title="@L["Удалить привычку?", "Delete habit?"]"
                Message="@L["Привычка и вся история её выполнения будут удалены. Чтобы сохранить историю, используйте архив.", "The habit and its whole history will be deleted. Archive it to keep the history."]" OnConfirm="DeleteAsync" />
 
+<ConfirmDialog @bind-Open="_resetting" Title="@L["Начать всё заново?", "Start over?"]" ConfirmText="@L["Сбросить отметки", "Reset check-offs"]"
+               Message="@L["Все отметки активных привычек будут удалены, серии и статистика начнутся с сегодняшнего дня. Сами привычки и их настройки сохранятся. Отменить это действие нельзя.", "All check-offs of active habits will be removed, and streaks and statistics will start again from today. The habits and their settings are kept. This cannot be undone."]"
+               OnConfirm="ResetAllAsync" />
+
 @code {
     private List<HabitDto>? _habits;
+    private bool _resetting;
     private IReadOnlyList<CategoryDto> _categories = [];
     private bool _showArchived;
     private bool _editorOpen;
@@ -154,6 +164,21 @@ else
         }
 
         _deleting = null;
+        await LoadAsync();
+    }
+
+    private async Task ResetAllAsync()
+    {
+        try
+        {
+            var result = await Api.PostAsync<HabitResetResult>("/api/v1/habits/reset", new { });
+            Toasts.Success(L[$"Прогресс сброшен: привычек — {result.HabitsReset}", $"Progress reset for {result.HabitsReset} habits"]);
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
         await LoadAsync();
     }
 

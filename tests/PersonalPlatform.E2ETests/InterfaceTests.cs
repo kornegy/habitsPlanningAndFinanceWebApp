@@ -27,6 +27,37 @@ public sealed class InterfaceTests(BrowserEnvironment env)
     }
 
     [Fact]
+    public async Task Colour_palette_closes_on_outside_click_without_closing_the_dialog()
+    {
+        await using var session = await BrowserSession.StartAsync(env, nameof(Colour_palette_closes_on_outside_click_without_closing_the_dialog));
+        await session.SignInAsNewUserAsync();
+        var page = session.Page;
+
+        await page.GotoAsync(session.Url("habits"));
+        await page.GetByRole(AriaRole.Button, new() { Name = "Новая привычка" }).ClickAsync();
+        var dialog = page.GetByRole(AriaRole.Dialog);
+        var toggle = dialog.Locator(".color-toggle");
+
+        await toggle.ClickAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "#5E8C61" }).ClickAsync();
+        await Assertions.Expect(page.Locator(".color-panel")).ToHaveCountAsync(0);
+        await Assertions.Expect(toggle).ToContainTextAsync("#5E8C61");
+
+        await toggle.ClickAsync();
+        await Assertions.Expect(page.Locator(".color-panel")).ToBeVisibleAsync();
+        await page.Mouse.ClickAsync(5, 5); // outside both the palette and the dialog
+        await Assertions.Expect(page.Locator(".color-panel")).ToHaveCountAsync(0);
+        await Assertions.Expect(dialog).ToBeVisibleAsync();
+
+        await toggle.ClickAsync();
+        await page.Keyboard.PressAsync("Escape");
+        await Assertions.Expect(page.Locator(".color-panel")).ToHaveCountAsync(0);
+        await Assertions.Expect(dialog).ToBeVisibleAsync();
+
+        session.AssertHealthy();
+    }
+
+    [Fact]
     public async Task Language_change_updates_navigation_without_reload()
     {
         await using var session = await BrowserSession.StartAsync(env, nameof(Language_change_updates_navigation_without_reload));

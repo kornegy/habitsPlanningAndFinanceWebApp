@@ -101,6 +101,31 @@ public sealed class HabitService(IAppDbContext db, ICurrentUser currentUser, Use
     }
 
     /// <summary>
+    /// Starts over: removes the check-offs of one habit (or of all active habits when <paramref name="id"/> is null)
+    /// and moves their start date to today, so streaks and completion rates are counted afresh. Archived habits
+    /// keep their history in a global reset.
+    /// </summary>
+    public async Task<HabitResetResult> ResetAsync(Guid? id, CancellationToken cancellationToken)
+    {
+        var owner = Owner;
+        var today = (await clock.GetAsync(cancellationToken)).Today;
+        await using var transaction = await db.BeginTransactionAsync(cancellationToken);
+        List<Habit> habits = id is { } habitId
+            ? [await LoadAsync(habitId, tracked: true, cancellationToken)]
+            : await db.Habits.Where(h => h.OwnerId == owner && h.ArchivedAt == null).ToListAsync(cancellationToken);
+        var ids = habits.Select(h => h.Id).ToList();
+        var removed = await db.HabitCompletions.Where(c => c.OwnerId == owner && ids.Contains(c.HabitId)).ExecuteDeleteAsync(cancellationToken);
+        foreach (var habit in habits)
+        {
+            habit.Restart(today, clock.UtcNow);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new HabitResetResult(habits.Count, removed);
+    }
+
+    /// <summary>
     /// Marks the habit done for a local date. Idempotent: checking off an already checked date succeeds without
     /// creating a second record (also under concurrent requests, thanks to the unique index).
     /// </summary>

@@ -1,0 +1,127 @@
+@page "/habits/quit"
+@using PersonalPlatform.Contracts.Habits
+@using PersonalPlatform.Contracts.Notes
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<PageTitle>@L["Вредные привычки", "Habits to quit"]</PageTitle>
+<div class="page-header">
+    <h1>@L["Привычки", "Habits"]</h1>
+    <div class="row">
+        <label class="checkbox small"><input type="checkbox" @bind="_showArchived" @bind:after="LoadAsync" /> @L["Архив", "Archived"]</label>
+        <button type="button" class="button button-primary" @onclick="() => Edit(null)"><Icon Name="plus" />@L["Бросить привычку", "Quit a habit"]</button>
+    </div>
+</div>
+<HabitTabs />
+
+@if (_habits is null)
+{
+    <Skeleton Lines="4" />
+}
+else if (_habits.Count == 0)
+{
+    <EmptyState IconName="flag" Title="@L["Здесь пока пусто", "Nothing here yet"]"
+                Text="@L["Добавьте привычку, от которой хотите отказаться. Дни без неё считаются сами — отмечать нужно только срывы.", "Add a habit you want to give up. Days without it are counted automatically; you only log relapses."]" />
+}
+else
+{
+    <ul class="list">
+        @foreach (var habit in _habits)
+        {
+            <li class="list-item quit-item" @key="habit.Id">
+                <ColorDot Color="@habit.Color" />
+                <div class="list-main">
+                    <a class="list-title" href="habits/quit/@habit.Id">@habit.Name</a>
+                    <div class="list-meta">
+                        <span class="quit-days">@L[$"{L.Days(habit.CurrentStreakDays)} без привычки", $"{L.Days(habit.CurrentStreakDays)} free"]</span>
+                        <span>@L[$"Рекорд: {L.Days(habit.LongestStreakDays)}", $"Best: {L.Days(habit.LongestStreakDays)}"]</span>
+                        <span>@L[$"Срывов: {habit.RelapseCount}", $"Relapses: {habit.RelapseCount}"]</span>
+                        @if (habit.IsArchived)
+                        {
+                            <span class="tag">@L["В архиве", "Archived"]</span>
+                        }
+                    </div>
+                    @if (habit.NextMilestoneDays is { } next && !habit.IsArchived)
+                    {
+                        <div class="quit-progress">
+                            <Meter Percent="@(habit.CurrentStreakDays * 100m / next)" Label="@L[$"До цели {L.Days(next)}: {habit.CurrentStreakDays} из {next}", $"Towards {L.Days(next)}: {habit.CurrentStreakDays} of {next}"]" />
+                            <span class="muted small">@L[$"Следующая цель — {L.Days(next)}", $"Next goal: {L.Days(next)}"]</span>
+                        </div>
+                    }
+                </div>
+                @if (!habit.IsArchived)
+                {
+                    <button type="button" class="button button-small" @onclick="() => _relapsing = habit">@L["Срыв", "Relapse"]</button>
+                }
+                <button type="button" class="icon-button" @onclick="() => Edit(habit)" aria-label="@L["Изменить", "Edit"]"><Icon Name="edit" /></button>
+                <button type="button" class="icon-button" @onclick="() => ArchiveAsync(habit)" aria-label="@(habit.IsArchived ? L["Вернуть из архива", "Restore"] : L["В архив", "Archive"])"><Icon Name="archive" /></button>
+                <button type="button" class="icon-button" @onclick="() => _deleting = habit" aria-label="@L["Удалить", "Delete"]"><Icon Name="trash" /></button>
+            </li>
+        }
+    </ul>
+}
+
+<QuitHabitEditor @bind-Open="_editorOpen" Habit="_editing" OnSaved="LoadAsync" />
+<RelapseDialog @bind-Habit="_relapsing" OnSaved="LoadAsync" />
+<ConfirmDialog Open="_deleting is not null" OpenChanged="v => { if (!v) _deleting = null; }" Title="@L["Удалить привычку?", "Delete habit?"]"
+               Message="@L["Привычка и история срывов будут удалены. Чтобы сохранить историю, используйте архив.", "The habit and its relapse history will be deleted. Archive it to keep the history."]" OnConfirm="DeleteAsync" />
+
+@code {
+    private List<QuitHabitDto>? _habits;
+    private bool _showArchived;
+    private bool _editorOpen;
+    private QuitHabitDto? _editing;
+    private QuitHabitDto? _relapsing;
+    private QuitHabitDto? _deleting;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _habits = await Api.GetAsync<List<QuitHabitDto>>($"/api/v1/quit-habits?includeArchived={(_showArchived ? "true" : "false")}");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+    }
+
+    private void Edit(QuitHabitDto? habit)
+    {
+        _editing = habit;
+        _editorOpen = true;
+    }
+
+    private async Task ArchiveAsync(QuitHabitDto habit)
+    {
+        try
+        {
+            await Api.PostAsync<QuitHabitDetailDto>($"/api/v1/quit-habits/{habit.Id}/archive", new SetArchivedRequest(!habit.IsArchived));
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        var habit = _deleting!;
+        try
+        {
+            await Api.DeleteAsync($"/api/v1/quit-habits/{habit.Id}");
+            Toasts.Success(L["Привычка удалена", "Habit deleted"]);
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        _deleting = null;
+        await LoadAsync();
+    }
+}

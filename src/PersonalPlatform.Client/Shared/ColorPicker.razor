@@ -1,0 +1,113 @@
+@* Colour choice from a preset palette plus a #RRGGBB field. Unlike the browser's native colour dialog, the panel
+   closes on a click anywhere outside it, on Escape and after a swatch is picked. Escape is not passed on, so a
+   surrounding dialog stays open. Inside dialogs use Inline: the panel then joins the flow and is never clipped. *@
+<div class="popover-anchor color-picker" @onkeydown="OnKeyDown" @onkeydown:stopPropagation="_open">
+    <button type="button" class="button color-toggle" aria-expanded="@(_open ? "true" : "false")" aria-haspopup="true" @ref="_toggle"
+            @onclick="Toggle" aria-label="@($"{Label}: {Value}")">
+        <ColorDot Color="@Value" Size="16" /><span class="num">@Value</span>
+    </button>
+    @if (_open)
+    {
+        <div class="popover-backdrop" @onclick="Close"></div>
+        <div class="color-panel @(Inline ? null : "floating")" role="group" aria-label="@Label">
+            <div class="color-swatches">
+                @foreach (var color in Presets)
+                {
+                    <button type="button" class="color-swatch" aria-label="@color" @ref="_swatchRefs[color]" aria-pressed="@(string.Equals(color, Value, StringComparison.OrdinalIgnoreCase) ? "true" : "false")"
+                            @onclick="() => PickAsync(color, close: true)"><ColorDot Color="@color" Size="22" /></button>
+                }
+            </div>
+            <label class="field">
+                <span class="small">@L["Свой цвет (#RRGGBB)", "Custom colour (#RRGGBB)"]</span>
+                <input class="num" value="@_hex" maxlength="7" spellcheck="false" autocomplete="off" aria-invalid="@(_invalid ? "true" : "false")"
+                       @onchange="OnHexChangedAsync" />
+            </label>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Muted, distinguishable colours that keep enough contrast in the light and the dark theme.</summary>
+    public static readonly string[] Presets =
+    [
+        "#5B7FA6", "#4F8A8B", "#5E8C61", "#8A9A3B", "#C29A3A", "#C2703D",
+        "#B5524B", "#B25A85", "#7D63A8", "#6B6F69", "#8A8D86", "#A58B6E",
+    ];
+
+    private readonly Dictionary<string, ElementReference> _swatchRefs = [];
+    private ElementReference _toggle;
+    private bool _open;
+    private bool _focusPanel;
+    private bool _invalid;
+    private string _hex = string.Empty;
+
+    [Parameter] public string Value { get; set; } = "#8A8D86";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = string.Empty;
+    [Parameter] public bool Inline { get; set; }
+
+    public static bool IsHex(string? value) =>
+        value is { Length: 7 } v && v[0] == '#' && v.Skip(1).All(Uri.IsHexDigit);
+
+    private void Toggle()
+    {
+        _open = !_open;
+        _focusPanel = _open;
+        _hex = Value;
+        _invalid = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusPanel && _open)
+        {
+            // Keyboard users land on the current colour (or the first swatch) instead of staying on the toggle.
+            _focusPanel = false;
+            var current = Presets.FirstOrDefault(c => string.Equals(c, Value, StringComparison.OrdinalIgnoreCase)) ?? Presets[0];
+            await _swatchRefs[current].FocusAsync();
+        }
+    }
+
+    private async Task Close()
+    {
+        _open = false;
+        await _toggle.FocusAsync();
+    }
+
+    private async Task PickAsync(string color, bool close)
+    {
+        Value = color.ToUpperInvariant();
+        await ValueChanged.InvokeAsync(Value);
+        if (close)
+        {
+            await Close();
+        }
+    }
+
+    private async Task OnHexChangedAsync(ChangeEventArgs e)
+    {
+        var text = (e.Value?.ToString() ?? string.Empty).Trim();
+        if (text.Length == 6 && !text.StartsWith('#'))
+        {
+            text = "#" + text;
+        }
+
+        _hex = text;
+        _invalid = !IsHex(text);
+        if (!_invalid)
+        {
+            await PickAsync(text, close: false);
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (_open && e.Key == "Escape")
+        {
+            // WebAssembly dispatches synchronously: closing right away would re-render and clear the stopPropagation
+            // flag before the event reaches the surrounding dialog, which would then close as well.
+            await Task.Yield();
+            await Close();
+        }
+    }
+}

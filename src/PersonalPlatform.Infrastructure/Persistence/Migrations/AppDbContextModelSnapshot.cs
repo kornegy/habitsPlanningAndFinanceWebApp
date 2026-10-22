@@ -798,6 +798,111 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
                     b.ToTable("habit_completions", "app");
                 });
 
+            modelBuilder.Entity("PersonalPlatform.Domain.Habits.QuitHabit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character(7)")
+                        .HasColumnName("color")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<DateOnly>("QuitDate")
+                        .HasColumnType("date")
+                        .HasColumnName("quit_date");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_quit_habits");
+
+                    b.HasAlternateKey("Id", "OwnerId")
+                        .HasName("ak_quit_habits_id_owner_id");
+
+                    b.HasIndex("OwnerId", "ArchivedAt")
+                        .HasDatabaseName("ix_quit_habits_owner_id_archived_at");
+
+                    b.ToTable("quit_habits", "app");
+                });
+
+            modelBuilder.Entity("PersonalPlatform.Domain.Habits.QuitHabitRelapse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<Guid>("QuitHabitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("quit_habit_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_quit_habit_relapses");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_quit_habit_relapses_owner_id");
+
+                    b.HasIndex("QuitHabitId", "Date")
+                        .IsUnique()
+                        .HasDatabaseName("ix_quit_habit_relapses_quit_habit_id_date");
+
+                    b.HasIndex("QuitHabitId", "OwnerId")
+                        .HasDatabaseName("ix_quit_habit_relapses_quit_habit_id_owner_id");
+
+                    b.ToTable("quit_habit_relapses", "app");
+                });
+
             modelBuilder.Entity("PersonalPlatform.Domain.Notes.JournalEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1957,6 +2062,34 @@ namespace PersonalPlatform.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_habit_completions_habits_habit_id_owner_id");
+                });
+
+            modelBuilder.Entity("PersonalPlatform.Domain.Habits.QuitHabit", b =>
+                {
+                    b.HasOne("PersonalPlatform.Infrastructure.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_quit_habits_asp_net_users_owner_id");
+                });
+
+            modelBuilder.Entity("PersonalPlatform.Domain.Habits.QuitHabitRelapse", b =>
+                {
+                    b.HasOne("PersonalPlatform.Infrastructure.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_quit_habit_relapses_asp_net_users_owner_id");
+
+                    b.HasOne("PersonalPlatform.Domain.Habits.QuitHabit", null)
+                        .WithMany()
+                        .HasForeignKey("QuitHabitId", "OwnerId")
+                        .HasPrincipalKey("Id", "OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_quit_habit_relapses_quit_habits_quit_habit_id_owner_id");
                 });
 
             modelBuilder.Entity("PersonalPlatform.Domain.Notes.JournalEntry", b =>

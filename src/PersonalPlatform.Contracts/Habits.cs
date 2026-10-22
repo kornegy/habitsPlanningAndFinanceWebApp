@@ -70,3 +70,32 @@ public sealed record HabitStatsDto(
     decimal CompletionRate,
     IReadOnlyList<PeriodStatDto> Weeks,
     IReadOnlyList<PeriodStatDto> Months);
+
+/// <summary>Outcome of a progress reset: how many habits restart today and how many check-offs were removed.</summary>
+public sealed record HabitResetResult(int HabitsReset, int CompletionsRemoved);
+
+/// <summary>A habit the user is quitting. All counters are computed on the server from the quit date and relapses.</summary>
+public sealed record QuitHabitDto(
+    Guid Id,
+    string Name,
+    string? Description,
+    string Color,
+    DateOnly QuitDate,
+    bool IsArchived,
+    int CurrentStreakDays,
+    int LongestStreakDays,
+    int RelapseCount,
+    DateOnly? LastRelapse,
+    int? NextMilestoneDays,
+    uint Version);
+
+public sealed record QuitHabitRelapseDto(DateOnly Date, string? Note);
+
+/// <summary>Quit habit with its most recent relapses (newest first, at most 500).</summary>
+public sealed record QuitHabitDetailDto(QuitHabitDto Habit, IReadOnlyList<QuitHabitRelapseDto> Relapses);
+
+public sealed record CreateQuitHabitRequest(string Name, string? Description, string? Color, DateOnly? QuitDate);
+
+public sealed record UpdateQuitHabitRequest(string Name, string? Description, string? Color, DateOnly QuitDate, uint Version);
+
+public sealed record LogRelapseRequest(DateOnly Date, string? Note);

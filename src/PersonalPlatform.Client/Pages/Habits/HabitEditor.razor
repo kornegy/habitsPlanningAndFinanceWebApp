@@ -32,11 +32,11 @@
             {
                 <label class="field"><span>@L["Интервал, дней", "Interval, days"]</span><input type="number" min="2" max="365" @bind="_interval" /></label>
             }
-            <div class="grid-3">
-                <label class="field"><span>@L["Цвет", "Colour"]</span><input type="color" @bind="_color" /></label>
+            <div class="grid-2">
                 <label class="field"><span>@L["Цель: серия, дней", "Goal: streak"]</span><input type="number" min="1" max="3650" @bind="_target" /></label>
                 <label class="field"><span>@L["Напоминание", "Reminder"]</span><input type="time" @bind="_reminder" /></label>
             </div>
+            <div class="field"><span>@L["Цвет", "Colour"]</span><ColorPicker @bind-Value="_color" Label="@L["Цвет", "Colour"]" Inline="true" /></div>
             <label class="field">
                 <span>@L["Категория", "Category"]</span>
                 <select @bind="_categoryId">
@@ -69,7 +69,7 @@
     private Weekdays _days;
     private int _interval = 2;
     private DateOnly _startDate;
-    private string _color = "#20211F";
+    private string _color = "#5B7FA6";
     private int? _target;
     private TimeOnly? _reminder;
     private string _categoryId = string.Empty;
@@ -94,7 +94,7 @@
             _days = Habit?.Days ?? Weekdays.None;
             _interval = Math.Max(Habit?.IntervalDays ?? 2, 2);
             _startDate = Habit?.StartDate ?? L.Today;
-            _color = Habit?.Color ?? "#20211F";
+            _color = Habit?.Color ?? "#5B7FA6";
             _target = Habit?.TargetStreak;
             _reminder = Habit?.ReminderTime;
             _categoryId = Habit?.CategoryId?.ToString() ?? string.Empty;

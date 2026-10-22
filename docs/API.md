@@ -181,10 +181,29 @@ Content-Type: application/json
 | PUT | `/api/v1/habits/{id}` | пользователь |  |
 | DELETE | `/api/v1/habits/{id}` | пользователь |  |
 | POST | `/api/v1/habits/{id}/archive` | пользователь |  |
+| POST | `/api/v1/habits/reset` | пользователь | Removes the check-offs of all active habits and restarts them from today. |
+| POST | `/api/v1/habits/{id}/reset` | пользователь | Removes the check-offs of one habit and restarts it from today. |
 | PUT | `/api/v1/habits/{id}/completions/{date}` | пользователь | Checks the habit off for a local date (idempotent). |
 | DELETE | `/api/v1/habits/{id}/completions/{date}` | пользователь | Removes the check-off for a local date (idempotent). |
 | GET | `/api/v1/habits/{id}/history` | пользователь |  |
 | GET | `/api/v1/habits/{id}/stats` | пользователь |  |
+
+### QuitHabits
+
+Привычки, от которых пользователь отказывается. Хранятся только дата отказа и срывы; дни без привычки,
+лучший результат, число срывов и следующая цель (1, 3, 7, 14, 30, 60, 90, 180, 365, 730, 1095 дней)
+вычисляются на сервере по локальной дате пользователя. Не больше 50 таких привычек на пользователя.
+
+| Метод | Путь | Доступ | Описание |
+|---|---|---|---|
+| GET | `/api/v1/quit-habits` | пользователь |  |
+| POST | `/api/v1/quit-habits` | пользователь |  |
+| GET | `/api/v1/quit-habits/{id}` | пользователь |  |
+| PUT | `/api/v1/quit-habits/{id}` | пользователь |  |
+| DELETE | `/api/v1/quit-habits/{id}` | пользователь |  |
+| POST | `/api/v1/quit-habits/{id}/archive` | пользователь |  |
+| POST | `/api/v1/quit-habits/{id}/relapses` | пользователь | Records a relapse on a local date (idempotent per date). |
+| DELETE | `/api/v1/quit-habits/{id}/relapses/{date}` | пользователь | Removes the relapse recorded on a local date (idempotent). |
 
 ### Notes
 

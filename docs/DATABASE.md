@@ -30,7 +30,7 @@ PostgreSQL 17, одна база `personal_platform`, все таблицы в �
 | Профиль | `user_profiles` |
 | Организация | `categories` (для задач и привычек), `tags` |
 | Задачи | `tasks`, `subtasks`, `task_tags`, `task_series` |
-| Привычки | `habits`, `habit_completions` |
+| Привычки | `habits`, `habit_completions`, `quit_habits`, `quit_habit_relapses` (вредные привычки и срывы) |
 | Планировщик | `time_blocks` |
 | Финансы | `accounts`, `finance_categories`, `transactions`, `ledger_entries`, `budgets`, `recurring_transactions` |
 | Заметки | `notes`, `note_tags`, `note_revisions`, `journal_entries` |
@@ -67,7 +67,7 @@ PostgreSQL 17, одна база `personal_platform`, все таблицы в �
 
 Уникальные индексы: `transactions(owner_id, idempotency_key)` — идемпотентность;
 `transactions(recurring_transaction_id, recurrence_date)` и `tasks(series_id, occurrence_date)` — нет дублей
-повторений; `habit_completions(habit_id, date)`; `journal_entries(owner_id, entry_date)`;
+повторений; `habit_completions(habit_id, date)`; `quit_habit_relapses(quit_habit_id, date)`; `journal_entries(owner_id, entry_date)`;
 `tags(owner_id, normalized_name)`; `categories(owner_id, scope, name)`;
 `finance_categories(owner_id, kind, parent_id, name)`; `budgets(owner_id, category_id, currency_code)`;
 `refresh_tokens(token_hash)`; `users(normalized_user_name)` (имя пользователя = email).

@@ -1,0 +1,71 @@
+@* Records a relapse: the date (today by default, never before the quit date or in the future) and an optional note
+   about the trigger, which helps to notice patterns later. *@
+@using PersonalPlatform.Contracts.Habits
+@inject ApiClient Api
+
+<Modal Open="Habit is not null" OpenChanged="v => { if (!v) HabitChanged.InvokeAsync(null); }" Title="@L["Отметить срыв", "Log a relapse"]">
+    <ChildContent>
+        @if (Habit is not null)
+        {
+            <form id="relapse-form" class="stack" @onsubmit="SaveAsync">
+                <p class="muted">@L["Срыв — не провал. Счётчик начнётся заново, а рекорд сохранится.", "A slip is not failure. The counter restarts and your best streak is kept."]</p>
+                <label class="field">
+                    <span>@L["Когда", "When"]</span>
+                    <input type="date" @bind="_date" min="@Query.Iso(Habit.QuitDate)" max="@Query.Iso(L.Today)" required />
+                </label>
+                <label class="field">
+                    <span>@L["Что к этому привело (необязательно)", "What led to it (optional)"]</span>
+                    <textarea @bind="_note" maxlength="500" rows="2"></textarea>
+                </label>
+                <ErrorText Error="_error" />
+            </form>
+        }
+    </ChildContent>
+    <Footer>
+        <button type="button" class="button" @onclick="() => HabitChanged.InvokeAsync(null)">@L["Отмена", "Cancel"]</button>
+        <button type="submit" form="relapse-form" class="button button-danger" disabled="@_busy">@L["Отметить срыв", "Log relapse"]</button>
+    </Footer>
+</Modal>
+
+@code {
+    private DateOnly _date;
+    private string? _note;
+    private ApiException? _error;
+    private bool _busy;
+    private Guid? _shownFor;
+
+    [Parameter] public QuitHabitDto? Habit { get; set; }
+    [Parameter] public EventCallback<QuitHabitDto?> HabitChanged { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Habit?.Id != _shownFor)
+        {
+            _shownFor = Habit?.Id;
+            _date = L.Today;
+            _note = null;
+            _error = null;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Api.PostAsync<QuitHabitDetailDto>($"/api/v1/quit-habits/{Habit!.Id}/relapses", new LogRelapseRequest(_date, _note));
+            await OnSaved.InvokeAsync();
+            await HabitChanged.InvokeAsync(null);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

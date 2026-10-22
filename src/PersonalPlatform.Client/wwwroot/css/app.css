@@ -169,8 +169,15 @@ input, select, textarea {
 }
 textarea { padding: var(--space-3); min-height: 120px; resize: vertical; line-height: 1.6; }
 input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; min-height: 0; accent-color: var(--ink); margin: 0; }
-input[type="color"] { padding: 2px; width: 48px; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--ink); box-shadow: var(--focus); }
+/* Browser autofill paints saved credentials yellow/blue, which clashes with both themes; keep autofilled fields
+   looking like every other field (the inset shadow is the only way to cover the UA background). */
+input:-webkit-autofill, input:-webkit-autofill:hover, textarea:-webkit-autofill, select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset; box-shadow: 0 0 0 1000px var(--surface) inset;
+  -webkit-text-fill-color: var(--ink); caret-color: var(--ink); transition: background-color 9999s ease-out 0s;
+}
+input:-webkit-autofill:focus { -webkit-box-shadow: 0 0 0 1000px var(--surface) inset, var(--focus); box-shadow: 0 0 0 1000px var(--surface) inset, var(--focus); }
+input:autofill { background-color: var(--surface); color: var(--ink); }
 
 .field { display: grid; gap: var(--space-1); }
 .field > span { font-size: var(--text-sm); font-weight: 500; }
@@ -267,12 +274,24 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--i
 .popover-backdrop { position: fixed; inset: 0; z-index: 29; background: transparent; }
 .popover { position: absolute; right: 0; top: calc(100% + var(--space-2)); width: 320px; max-height: 60vh; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); z-index: 30; box-shadow: var(--shadow); }
 .popover-menu { width: 200px; padding: var(--space-1); }
+/* Colour picker: the panel sits in the document flow (so dialogs never clip it) above the dismiss layer. */
+.color-picker { justify-self: start; }
+.color-toggle { gap: var(--space-2); min-width: 0; justify-content: flex-start; }
+.color-panel { position: relative; z-index: 30; margin-top: var(--space-2); padding: var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); display: grid; gap: var(--space-3); width: max-content; max-width: 100%; }
+.color-panel.floating { position: absolute; left: 0; top: calc(100% + var(--space-2)); margin-top: 0; }
+.color-swatches { display: grid; grid-template-columns: repeat(6, 32px); gap: var(--space-1); }
+@media (max-width: 380px) { .color-swatches { grid-template-columns: repeat(4, 32px); } }
+.color-swatch { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 8px; background: none; padding: 0; cursor: pointer; }
+.color-swatch:hover { border-color: var(--line-strong); }
+.color-swatch[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.color-swatch:focus-visible { outline: none; box-shadow: var(--focus); }
+.color-panel input[aria-invalid="true"] { border-color: var(--danger); }
 .popover-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--line); }
 .popover-row:last-child { border-bottom: none; }
 .menu-item { display: flex; align-items: center; gap: var(--space-2); width: 100%; border: none; background: none; padding: var(--space-2) var(--space-3); border-radius: var(--radius-small); font: inherit; color: var(--ink); cursor: pointer; text-align: left; }
 .menu-item:hover { background: var(--hover); }
 .modal-backdrop { position: fixed; inset: 0; background: var(--backdrop); z-index: 50; }
-.modal { position: fixed; z-index: 51; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--line); }
+.modal { position: fixed; z-index: 51; inset: 0; margin: auto; height: fit-content; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; background: var(--bg); border-radius: var(--radius); border: 1px solid var(--line); }
 .modal-wide { width: min(760px, calc(100vw - 32px)); }
 .modal:focus { outline: none; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; padding: var(--space-4) var(--space-5) 0; }
@@ -314,6 +333,18 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--i
 .heatmap-cell.scheduled { border-color: var(--line-strong); }
 .heatmap-cell.completed { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .heatmap-cell.today { box-shadow: inset 0 0 0 2px var(--muted); }
+/* Quit habits: clean days in the success colour, relapses in the danger colour (with the legend for the meaning). */
+.heatmap-cell.clean { background: color-mix(in srgb, var(--success) 22%, transparent); color: var(--ink); }
+.heatmap-cell.relapse { background: var(--danger); color: var(--bg); }
+.legend-clean { background: color-mix(in srgb, var(--success) 45%, transparent); }
+.legend-relapse { background: var(--danger); }
+.quit-days { color: var(--success); font-weight: 500; }
+.quit-progress { display: grid; grid-template-columns: minmax(120px, 280px) auto; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
+.milestone-meter { max-width: 480px; }
+.milestones { list-style: none; padding: 0; margin: 0 0 var(--space-4); display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.milestone { display: inline-flex; align-items: center; gap: var(--space-1); height: 28px; padding: 0 var(--space-3); border-radius: 999px; border: 1px solid var(--line); color: var(--muted-ink); font-size: var(--text-sm); }
+.milestone.reached { border-color: var(--success); color: var(--success); }
+.milestone.next { border-color: var(--ink); color: var(--ink); font-weight: 500; }
 
 /* ---------- Planner ---------- */
 .planner { display: grid; border-top: 1px solid var(--line); }
@@ -369,6 +400,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--i
   .sheet-backdrop { display: block; position: fixed; inset: 0; z-index: 41; background: var(--sheet-backdrop); }
   .sheet { display: grid; gap: var(--space-1); position: fixed; inset: auto 0 64px 0; z-index: 42; background: var(--bg); border-top: 1px solid var(--line); padding: var(--space-3); }
   .popover { position: fixed; left: var(--space-3); right: var(--space-3); top: 64px; width: auto; }
+  .color-panel.floating { position: fixed; left: var(--space-3); right: var(--space-3); top: 64px; width: auto; }
+  /* Quit habits: progress and actions move under the name so the text keeps the full width. */
+  .quit-item { flex-wrap: wrap; }
+  .quit-item .list-main { flex: 1 1 calc(100% - 32px); }
+  .quit-item > .button { margin-left: 22px; margin-right: auto; }
+  .quit-progress { grid-template-columns: 1fr; gap: var(--space-1); }
   .table .hide-narrow { display: none; }
   .toolbar input, .toolbar select { min-width: 0; flex: 1 1 140px; }
   .toasts { left: var(--space-3); right: var(--space-3); bottom: 76px; }

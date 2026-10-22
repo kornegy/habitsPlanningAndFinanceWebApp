@@ -86,6 +86,19 @@ public sealed class Loc
     public string Money(decimal amount, string currency) =>
         $"{amount.ToString("N" + MinorUnits(currency), Culture)} {currency}";
 
+    /// <summary>"5 дней" / "5 days", with the Russian plural form chosen by the last digits.</summary>
+    public string Days(int count)
+    {
+        if (IsEnglish)
+        {
+            return count == 1 ? "1 day" : $"{count.ToString(Culture)} days";
+        }
+
+        var (lastTwo, last) = (Math.Abs(count) % 100, Math.Abs(count) % 10);
+        var word = lastTwo is >= 11 and <= 14 ? "дней" : last switch { 1 => "день", 2 or 3 or 4 => "дня", _ => "дней" };
+        return $"{count.ToString(Culture)} {word}";
+    }
+
     public string Percent(decimal value) => $"{value.ToString("0.#", Culture)}%";
 
     /// <summary>Converts a local date and time in the user's zone to an absolute instant (DST gaps move forward).</summary>

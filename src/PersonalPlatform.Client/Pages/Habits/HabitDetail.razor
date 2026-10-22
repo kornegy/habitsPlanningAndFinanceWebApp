@@ -19,6 +19,7 @@ else
                 <p class="muted plain-text">@_habit.Description</p>
             }
         </div>
+        <button type="button" class="button" @onclick="() => _resetting = true"><Icon Name="repeat" />@L["Сбросить прогресс", "Reset progress"]</button>
     </div>
 
     <div class="kpis">
@@ -98,8 +99,13 @@ else
     </div>
 }
 
+<ConfirmDialog @bind-Open="_resetting" Title="@L["Сбросить прогресс привычки?", "Reset this habit's progress?"]" ConfirmText="@L["Сбросить", "Reset"]"
+               Message="@L["Все отметки этой привычки будут удалены, а отсчёт серии начнётся с сегодняшнего дня. Отменить это действие нельзя.", "All check-offs of this habit will be removed and the streak will start again from today. This cannot be undone."]"
+               OnConfirm="ResetAsync" />
+
 @code {
     private HabitDto? _habit;
+    private bool _resetting;
     private HabitHistoryDto? _history;
     private HabitStatsDto? _stats;
     private HabitStatsDto? _yearStats;
@@ -135,6 +141,22 @@ else
         {
             Toasts.Error(ex.IsNotFound ? L["Привычка не найдена", "Habit not found"] : ex.Message);
         }
+    }
+
+    private async Task ResetAsync()
+    {
+        try
+        {
+            await Api.PostAsync<HabitResetResult>($"/api/v1/habits/{Id}/reset", new { });
+            Toasts.Success(L["Прогресс сброшен", "Progress reset"]);
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        _yearStats = null;
+        await LoadAsync();
     }
 
     private async Task ShiftAsync(int months)

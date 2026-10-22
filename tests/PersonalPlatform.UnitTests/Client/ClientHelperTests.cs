@@ -104,6 +104,40 @@ public sealed class LocTests
         }
     }
 
+    [Theory]
+    [InlineData(1, "1 день")]
+    [InlineData(3, "3 дня")]
+    [InlineData(5, "5 дней")]
+    [InlineData(11, "11 дней")]
+    [InlineData(12, "12 дней")]
+    [InlineData(21, "21 день")]
+    [InlineData(104, "104 дня")]
+    [InlineData(0, "0 дней")]
+    public void Russian_day_counts_use_the_correct_plural_form(int count, string expected)
+    {
+        var loc = new Loc();
+        loc.SetLanguage(english: false);
+        Assert.Equal(expected, loc.Days(count));
+    }
+
+    [Fact]
+    public void English_day_counts_use_singular_only_for_one()
+    {
+        var (culture, uiCulture) = (CultureInfo.DefaultThreadCurrentCulture, CultureInfo.DefaultThreadCurrentUICulture);
+        try
+        {
+            var loc = new Loc();
+            loc.SetLanguage(english: true);
+            Assert.Equal("1 day", loc.Days(1));
+            Assert.Equal("2 days", loc.Days(2));
+        }
+        finally
+        {
+            CultureInfo.DefaultThreadCurrentCulture = culture;
+            CultureInfo.DefaultThreadCurrentUICulture = uiCulture;
+        }
+    }
+
     private static ProfileDto Profile(string locale, DateFormatPreference format, DayOfWeek firstDay, string zone) =>
         new("user@example.test", "Test", zone, locale, "RUB", format, firstDay, false, ThemePreference.System, new DateOnly(2026, 3, 11), 1);
 }

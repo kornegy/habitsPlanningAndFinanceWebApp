@@ -1,0 +1,84 @@
+@using PersonalPlatform.Contracts.Habits
+@inject ApiClient Api
+
+<Modal Open="Open" OpenChanged="OpenChanged" Title="@(Habit is null ? L["Бросить привычку", "Quit a habit"] : L["Вредная привычка", "Habit to quit"])">
+    <ChildContent>
+        <form id="quit-habit-form" class="stack" @onsubmit="SaveAsync">
+            <label class="field">
+                <span>@L["Что вы бросаете", "What are you quitting"]</span>
+                <input @bind="_name" required maxlength="100" placeholder="@L["Например: сладкое после 20:00", "e.g. sweets after 8 pm"]" />
+            </label>
+            <label class="field">
+                <span>@L["Зачем (мотивация)", "Why (motivation)"]</span>
+                <textarea @bind="_description" maxlength="1000" rows="2"></textarea>
+            </label>
+            <label class="field">
+                <span>@L["Дата отказа", "Quit date"]</span>
+                <input type="date" @bind="_quitDate" max="@Query.Iso(L.Today)" required />
+            </label>
+            <div class="field"><span>@L["Цвет", "Colour"]</span><ColorPicker @bind-Value="_color" Label="@L["Цвет", "Colour"]" Inline="true" /></div>
+            <ErrorText Error="_error" />
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="button" @onclick="() => OpenChanged.InvokeAsync(false)">@L["Отмена", "Cancel"]</button>
+        <button type="submit" form="quit-habit-form" class="button button-primary" disabled="@_busy">@L["Сохранить", "Save"]</button>
+    </Footer>
+</Modal>
+
+@code {
+    private string _name = string.Empty;
+    private string? _description;
+    private DateOnly _quitDate;
+    private string _color = "#B5524B";
+    private ApiException? _error;
+    private bool _busy;
+    private bool _wasOpen;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public QuitHabitDto? Habit { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _error = null;
+            _name = Habit?.Name ?? string.Empty;
+            _description = Habit?.Description;
+            _quitDate = Habit?.QuitDate ?? L.Today;
+            _color = Habit?.Color ?? "#B5524B";
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            if (Habit is null)
+            {
+                await Api.PostAsync<QuitHabitDetailDto>("/api/v1/quit-habits", new CreateQuitHabitRequest(_name, _description, _color, _quitDate));
+            }
+            else
+            {
+                await Api.PutAsync<QuitHabitDetailDto>($"/api/v1/quit-habits/{Habit.Id}", new UpdateQuitHabitRequest(_name, _description, _color, _quitDate, Habit.Version));
+            }
+
+            await OnSaved.InvokeAsync();
+            await OpenChanged.InvokeAsync(false);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

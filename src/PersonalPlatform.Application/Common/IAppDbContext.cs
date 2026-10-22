@@ -34,6 +34,10 @@ public interface IAppDbContext
 
     DbSet<HabitCompletion> HabitCompletions { get; }
 
+    DbSet<QuitHabit> QuitHabits { get; }
+
+    DbSet<QuitHabitRelapse> QuitHabitRelapses { get; }
+
     DbSet<TimeBlock> TimeBlocks { get; }
 
     DbSet<Account> Accounts { get; }

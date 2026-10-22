@@ -43,6 +43,36 @@ internal sealed class HabitCompletionConfiguration : IEntityTypeConfiguration<Ha
     }
 }
 
+internal sealed class QuitHabitConfiguration : IEntityTypeConfiguration<QuitHabit>
+{
+    public void Configure(EntityTypeBuilder<QuitHabit> b)
+    {
+        b.ToTable("quit_habits");
+        b.HasKey(h => h.Id);
+        b.HasOwner();
+        b.HasOwnerScopedKey();
+        b.Property(h => h.Name).HasMaxLength(QuitHabit.NameMaxLength);
+        b.Property(h => h.Description).HasMaxLength(QuitHabit.DescriptionMaxLength);
+        b.Property(h => h.Color).HasMaxLength(7).IsFixedLength();
+        b.HasIndex(h => new { h.OwnerId, h.ArchivedAt });
+        b.HasXminVersion();
+    }
+}
+
+internal sealed class QuitHabitRelapseConfiguration : IEntityTypeConfiguration<QuitHabitRelapse>
+{
+    public void Configure(EntityTypeBuilder<QuitHabitRelapse> b)
+    {
+        b.ToTable("quit_habit_relapses");
+        b.HasKey(r => r.Id);
+        b.HasOwner();
+        b.Property(r => r.Note).HasMaxLength(QuitHabitRelapse.NoteMaxLength);
+        b.ReferencesOwned<QuitHabitRelapse, QuitHabit>(nameof(QuitHabitRelapse.QuitHabitId), DeleteBehavior.Cascade);
+        // At most one relapse per habit per local date, so repeated taps cannot inflate the count.
+        b.HasIndex(r => new { r.QuitHabitId, r.Date }).IsUnique();
+    }
+}
+
 internal sealed class TimeBlockConfiguration : IEntityTypeConfiguration<TimeBlock>
 {
     public void Configure(EntityTypeBuilder<TimeBlock> b)

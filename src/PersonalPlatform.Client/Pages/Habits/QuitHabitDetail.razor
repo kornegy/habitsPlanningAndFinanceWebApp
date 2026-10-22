@@ -1,0 +1,204 @@
+@page "/habits/quit/{Id:guid}"
+@using PersonalPlatform.Contracts.Habits
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<PageTitle>@(_detail?.Habit.Name ?? L["Вредная привычка", "Habit to quit"])</PageTitle>
+@if (_detail is null)
+{
+    <Skeleton Lines="6" />
+}
+else
+{
+    var habit = _detail.Habit;
+    <div class="page-header">
+        <div>
+            <a href="habits/quit" class="small"><Icon Name="chevron-left" Size="14" />@L["Вредные привычки", "Habits to quit"]</a>
+            <h1 class="row"><ColorDot Color="@habit.Color" Size="14" />@habit.Name</h1>
+            @if (!string.IsNullOrEmpty(habit.Description))
+            {
+                <p class="muted plain-text">@habit.Description</p>
+            }
+        </div>
+        <div class="row">
+            <button type="button" class="button" @onclick="() => _editorOpen = true"><Icon Name="edit" />@L["Изменить", "Edit"]</button>
+            @if (!habit.IsArchived)
+            {
+                <button type="button" class="button button-danger" @onclick="() => _relapsing = habit">@L["Отметить срыв", "Log relapse"]</button>
+            }
+        </div>
+    </div>
+
+    <div class="kpis">
+        <div class="stat"><span class="stat-value">@habit.CurrentStreakDays</span><span class="stat-label">@L["дней без привычки", "days free"]</span></div>
+        <div class="stat"><span class="stat-value">@habit.LongestStreakDays</span><span class="stat-label">@L["лучший результат, дней", "best run, days"]</span></div>
+        <div class="stat"><span class="stat-value">@habit.RelapseCount</span><span class="stat-label">@L["всего срывов", "relapses in total"]</span></div>
+        <div class="stat"><span class="stat-value">@L.Date(habit.QuitDate)</span><span class="stat-label">@L["дата отказа", "quit date"]</span></div>
+    </div>
+
+    <section class="section" aria-labelledby="milestones-title">
+        <h2 id="milestones-title">@L["Цели", "Milestones"]</h2>
+        <ol class="milestones">
+            @foreach (var days in Milestones)
+            {
+                var reached = habit.CurrentStreakDays >= days;
+                var isNext = days == habit.NextMilestoneDays;
+                <li class="milestone @(reached ? "reached" : null) @(isNext ? "next" : null)">
+                    @if (reached)
+                    {
+                        <Icon Name="check" Size="14" />
+                    }
+                    <span>@MilestoneName(days)</span>
+                    @if (isNext)
+                    {
+                        <span class="visually-hidden">@L["следующая цель", "next goal"]</span>
+                    }
+                </li>
+            }
+        </ol>
+        @if (habit.NextMilestoneDays is { } next)
+        {
+            <div class="milestone-meter">
+                <Meter Percent="@(habit.CurrentStreakDays * 100m / next)" Label="@L[$"{habit.CurrentStreakDays} из {next} дней", $"{habit.CurrentStreakDays} of {next} days"]" />
+            </div>
+            <p class="muted small">@L[$"До цели «{MilestoneName(next)}» осталось {L.Days(next - habit.CurrentStreakDays)}.", $"{L.Days(next - habit.CurrentStreakDays)} left until “{MilestoneName(next)}”."]</p>
+        }
+        else
+        {
+            <p class="muted small">@L["Все цели достигнуты. Так держать!", "Every milestone reached. Keep it up!"]</p>
+        }
+    </section>
+
+    <div class="grid-2">
+        <section class="section" aria-labelledby="calendar-title">
+            <div class="section-title">
+                <h2 id="calendar-title">@L.MonthYear(_month.Year, _month.Month)</h2>
+                <div class="row">
+                    <button type="button" class="icon-button" @onclick="() => _month = _month.AddMonths(-1)" aria-label="@L["Предыдущий месяц", "Previous month"]"><Icon Name="chevron-left" /></button>
+                    <button type="button" class="icon-button" @onclick="() => _month = _month.AddMonths(1)" disabled="@(_month.AddMonths(1) > L.Today)" aria-label="@L["Следующий месяц", "Next month"]"><Icon Name="chevron-right" /></button>
+                </div>
+            </div>
+            <div class="heatmap" role="grid" aria-label="@L["Календарь срывов", "Relapse calendar"]">
+                @for (var i = 0; i < 7; i++)
+                {
+                    <span class="heatmap-cell small" role="columnheader">@L.Culture.DateTimeFormat.GetShortestDayName((DayOfWeek)(((int)L.FirstDayOfWeek + i) % 7))</span>
+                }
+                @for (var i = 0; i < Offset; i++)
+                {
+                    <span class="heatmap-cell" aria-hidden="true"></span>
+                }
+                @for (var day = _month; day <= MonthEnd; day = day.AddDays(1))
+                {
+                    var relapse = _relapseDates.Contains(day);
+                    var clean = !relapse && day >= habit.QuitDate && day <= L.Today;
+                    var state = relapse ? L["срыв", "relapse"] : clean ? L["без привычки", "free"] : null;
+                    <span class="heatmap-cell @(relapse ? "relapse" : null) @(clean ? "clean" : null) @(day == L.Today ? "today" : null)"
+                          aria-label="@(state is null ? L.Date(day) : $"{L.Date(day)}: {state}")">@day.Day</span>
+                }
+            </div>
+            <p class="legend small muted">
+                <span><span class="legend-swatch legend-clean" aria-hidden="true"></span>@L["день без привычки", "day free"]</span>
+                <span><span class="legend-swatch legend-relapse" aria-hidden="true"></span>@L["срыв", "relapse"]</span>
+            </p>
+        </section>
+
+        <section class="section" aria-labelledby="relapses-title">
+            <h2 id="relapses-title">@L["История срывов", "Relapse history"]</h2>
+            @if (_detail.Relapses.Count == 0)
+            {
+                <p class="muted">@L["Срывов не было. Отличное начало!", "No relapses so far. Great start!"]</p>
+            }
+            else
+            {
+                <ul class="list">
+                    @foreach (var relapse in _detail.Relapses)
+                    {
+                        <li class="list-item" @key="relapse.Date">
+                            <div class="list-main">
+                                <span class="list-title">@L.Date(relapse.Date)</span>
+                                @if (!string.IsNullOrEmpty(relapse.Note))
+                                {
+                                    <div class="list-meta plain-text">@relapse.Note</div>
+                                }
+                            </div>
+                            <button type="button" class="icon-button" @onclick="() => _deletingRelapse = relapse"
+                                    aria-label="@L[$"Удалить срыв {L.Date(relapse.Date)}", $"Delete relapse on {L.Date(relapse.Date)}"]"><Icon Name="trash" /></button>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    </div>
+
+    <QuitHabitEditor @bind-Open="_editorOpen" Habit="habit" OnSaved="LoadAsync" />
+}
+
+<RelapseDialog @bind-Habit="_relapsing" OnSaved="LoadAsync" />
+<ConfirmDialog Open="_deletingRelapse is not null" OpenChanged="v => { if (!v) _deletingRelapse = null; }" Title="@L["Удалить запись о срыве?", "Delete this relapse?"]"
+               Message="@L["Используйте это, если срыв отмечен по ошибке. Счётчик дней будет пересчитан.", "Use this if the relapse was logged by mistake. The day counter is recalculated."]" OnConfirm="DeleteRelapseAsync" />
+
+@code {
+    private static readonly int[] Milestones = [1, 3, 7, 14, 30, 60, 90, 180, 365, 730, 1095];
+
+    private QuitHabitDetailDto? _detail;
+    private HashSet<DateOnly> _relapseDates = [];
+    private DateOnly _month;
+    private bool _editorOpen;
+    private QuitHabitDto? _relapsing;
+    private QuitHabitRelapseDto? _deletingRelapse;
+
+    [Parameter] public Guid Id { get; set; }
+
+    private DateOnly MonthEnd => _month.AddMonths(1).AddDays(-1);
+
+    private int Offset => ((int)_month.DayOfWeek - (int)L.FirstDayOfWeek + 7) % 7;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _month = new DateOnly(L.Today.Year, L.Today.Month, 1);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _detail = await Api.GetAsync<QuitHabitDetailDto>($"/api/v1/quit-habits/{Id}");
+            _relapseDates = _detail.Relapses.Select(r => r.Date).ToHashSet();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.IsNotFound ? L["Привычка не найдена", "Habit not found"] : ex.Message);
+        }
+    }
+
+    private async Task DeleteRelapseAsync()
+    {
+        var relapse = _deletingRelapse!;
+        try
+        {
+            _detail = await Api.DeleteAsync<QuitHabitDetailDto>($"/api/v1/quit-habits/{Id}/relapses/{Query.Iso(relapse.Date)}");
+            _relapseDates = _detail.Relapses.Select(r => r.Date).ToHashSet();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message);
+        }
+
+        _deletingRelapse = null;
+    }
+
+    private string MilestoneName(int days) => days switch
+    {
+        7 => L["неделя", "1 week"],
+        14 => L["2 недели", "2 weeks"],
+        30 => L["месяц", "1 month"],
+        60 => L["2 месяца", "2 months"],
+        90 => L["3 месяца", "3 months"],
+        180 => L["полгода", "6 months"],
+        365 => L["год", "1 year"],
+        730 => L["2 года", "2 years"],
+        1095 => L["3 года", "3 years"],
+        _ => L.Days(days),
+    };
+}

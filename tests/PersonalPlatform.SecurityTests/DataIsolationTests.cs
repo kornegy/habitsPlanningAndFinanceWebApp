@@ -253,6 +253,40 @@ public sealed class DataIsolationTests(ApiTestEnvironment env)
     private static string Normalise(string problemJson) =>
         System.Text.RegularExpressions.Regex.Replace(problemJson, "\"traceId\":\"[0-9a-f]+\"", "\"traceId\":\"\"");
 
+    [Fact]
+    public async Task Habits_to_quit_and_habit_resets_are_scoped_to_their_owner()
+    {
+        var (victim, d) = await VictimAsync();
+        var quit = (await victim.PostJsonAsync<CreateQuitHabitRequest, QuitHabitDetailDto>("/api/v1/quit-habits", new($"Quit {d.Marker}", $"why {d.Marker}", null, d.Today.AddDays(-3)))).Habit;
+        await victim.PostJsonAsync<LogRelapseRequest, QuitHabitDetailDto>($"/api/v1/quit-habits/{quit.Id}/relapses", new(d.Today.AddDays(-1), $"note {d.Marker}"), HttpStatusCode.OK);
+        var attacker = await env.CreateUserAsync();
+        await attacker.PostAsync("/api/v1/habits/reset", new { }).EnsureStatusAsync(HttpStatusCode.OK); // must not touch the victim's habits
+
+        var attempts = new List<(string Name, Func<Task<HttpResponseMessage>> Call)>
+        {
+            ("get quit habit", () => attacker.GetAsync($"/api/v1/quit-habits/{quit.Id}")),
+            ("update quit habit", () => attacker.PutAsync($"/api/v1/quit-habits/{quit.Id}", new UpdateQuitHabitRequest("pwned", null, null, d.Today, 0))),
+            ("archive quit habit", () => attacker.PostAsync($"/api/v1/quit-habits/{quit.Id}/archive", new SetArchivedRequest(true))),
+            ("log relapse", () => attacker.PostAsync($"/api/v1/quit-habits/{quit.Id}/relapses", new LogRelapseRequest(d.Today, null))),
+            ("delete relapse", () => attacker.DeleteAsync($"/api/v1/quit-habits/{quit.Id}/relapses/{d.Today.AddDays(-1):yyyy-MM-dd}")),
+            ("delete quit habit", () => attacker.DeleteAsync($"/api/v1/quit-habits/{quit.Id}")),
+            ("reset habit", () => attacker.PostAsync($"/api/v1/habits/{d.HabitId}/reset", new { })),
+        };
+        foreach (var (name, call) in attempts)
+        {
+            var response = await call();
+            Assert.True(response.StatusCode == HttpStatusCode.NotFound, $"{name} returned {(int)response.StatusCode}");
+        }
+
+        var list = await (await attacker.GetAsync("/api/v1/quit-habits?includeArchived=true").EnsureStatusAsync(HttpStatusCode.OK)).Content.ReadAsStringAsync();
+        Assert.DoesNotContain(d.Marker, list, StringComparison.Ordinal);
+        Assert.DoesNotContain(quit.Id.ToString(), list, StringComparison.OrdinalIgnoreCase);
+
+        var after = await victim.GetJsonAsync<QuitHabitDetailDto>($"/api/v1/quit-habits/{quit.Id}");
+        Assert.Equal((quit.Name, false, 1), (after.Habit.Name, after.Habit.IsArchived, after.Habit.RelapseCount));
+        Assert.True((await victim.GetJsonAsync<HabitDto>($"/api/v1/habits/{d.HabitId}")).CompletedToday);
+    }
+
     private async Task<(TestUser Victim, VictimData Data)> VictimAsync()
     {
         var victim = await env.CreateUserAsync();
