@@ -2,7 +2,7 @@
 @implements IDisposable
 <div class="auth-shell">
     <main class="auth-card">
-        <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Personal Platform</div>
+        <div class="brand"><img class="brand-mark" src="icons/icon-64.png" alt="" width="24" height="24" />Personal Platform</div>
         @Body
     </main>
     <button type="button" class="link-button lang-switch" @onclick="() => L.SetLanguage(!L.IsEnglish)">@L["English", "Русский"]</button>
