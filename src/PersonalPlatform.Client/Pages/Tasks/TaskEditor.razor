@@ -33,9 +33,9 @@
                 }
             </div>
             <div class="grid-3">
-                <label class="field"><span>@L["Время", "Time"]</span><input type="time" @bind="_dueTime" disabled="@(_dueDate is null && !_recurring)" /></label>
+                <div class="field"><span>@L["Время", "Time"]</span><TimeField @bind-Value="_dueTime" Label="@L["Время", "Time"]" AllowEmpty="true" Disabled="@(_dueDate is null && !_recurring)" /></div>
                 <label class="field"><span>@L["Напомнить (дата)", "Remind on"]</span><input type="date" @bind="_reminderDate" /></label>
-                <label class="field"><span>@L["Напомнить (время)", "Remind at"]</span><input type="time" @bind="_reminderTime" /></label>
+                <div class="field"><span>@L["Напомнить (время)", "Remind at"]</span><TimeField @bind-Value="_reminderTime" Label="@L["Напомнить (время)", "Remind at"]" AllowEmpty="true" /></div>
             </div>
 
             @if (Task is null)

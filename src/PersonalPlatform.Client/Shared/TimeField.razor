@@ -1,0 +1,62 @@
+@using System.Globalization
+@* 24-hour time entry (hours and minutes as two selects). The native <input type="time"> follows the operating
+   system's clock format, so on 12-hour systems "12:00 PM" (noon) is easily mistaken for midnight; the app shows
+   and stores 24-hour times everywhere, so entry uses the same format on every device. *@
+<div class="time-field" role="group" aria-label="@Label">
+    <select aria-label="@L[$"{Label}: часы", $"{Label}: hours"]" disabled="@Disabled" value="@(Value is { } v ? v.Hour.ToString("00", CultureInfo.InvariantCulture) : string.Empty)"
+            @onchange="OnHourChangedAsync">
+        @if (AllowEmpty)
+        {
+            <option value="">--</option>
+        }
+        @for (var h = 0; h < 24; h++)
+        {
+            var text = h.ToString("00", CultureInfo.InvariantCulture);
+            <option value="@text">@text</option>
+        }
+    </select>
+    <span class="time-field-separator" aria-hidden="true">:</span>
+    <select aria-label="@L[$"{Label}: минуты", $"{Label}: minutes"]" disabled="@(Disabled || Value is null)"
+            value="@(Value is { } m ? m.Minute.ToString("00", CultureInfo.InvariantCulture) : string.Empty)" @onchange="OnMinuteChangedAsync">
+        @if (Value is null)
+        {
+            <option value="">--</option>
+        }
+        @foreach (var minute in Minutes)
+        {
+            var text = minute.ToString("00", CultureInfo.InvariantCulture);
+            <option value="@text">@text</option>
+        }
+    </select>
+</div>
+
+@code {
+    [Parameter] public TimeOnly? Value { get; set; }
+    [Parameter] public EventCallback<TimeOnly?> ValueChanged { get; set; }
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public bool AllowEmpty { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public int StepMinutes { get; set; } = 5;
+
+    /// <summary>Minute choices in steps, plus the current minute if a stored time is off the step grid.</summary>
+    private IEnumerable<int> Minutes =>
+        Enumerable.Range(0, 60 / StepMinutes).Select(i => i * StepMinutes)
+            .Union(Value is { } v ? [v.Minute] : [])
+            .Order();
+
+    private Task OnHourChangedAsync(ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out var hour) && hour is >= 0 and < 24
+            ? SetAsync(new TimeOnly(hour, Value?.Minute ?? 0))
+            : SetAsync(null);
+
+    private Task OnMinuteChangedAsync(ChangeEventArgs e) =>
+        Value is { } current && int.TryParse(e.Value?.ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out var minute) && minute is >= 0 and < 60
+            ? SetAsync(new TimeOnly(current.Hour, minute))
+            : Task.CompletedTask;
+
+    private async Task SetAsync(TimeOnly? value)
+    {
+        Value = value;
+        await ValueChanged.InvokeAsync(value);
+    }
+}

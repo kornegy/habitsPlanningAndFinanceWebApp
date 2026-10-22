@@ -7,9 +7,21 @@
             <label class="field"><span>@L["Название", "Title"]</span><input @bind="_title" required maxlength="200" /></label>
             <div class="grid-3">
                 <label class="field"><span>@L["Дата", "Date"]</span><input type="date" @bind="_date" required /></label>
-                <label class="field"><span>@L["Начало", "Start"]</span><input type="time" step="300" @bind="_start" required /></label>
-                <label class="field"><span>@L["Окончание", "End"]</span><input type="time" step="300" @bind="_end" required /></label>
+                <div class="field"><span>@L["Начало", "Start"]</span><TimeField Value="_start" ValueChanged="v => _start = v ?? _start" Label="@L["Начало", "Start"]" /></div>
+                <div class="field"><span>@L["Окончание", "End"]</span><TimeField Value="_end" ValueChanged="v => _end = v ?? _end" Label="@L["Окончание", "End"]" /></div>
             </div>
+            <p class="block-timing @(Timing.EndsNextDay ? "next-day" : null)" role="status" aria-live="polite">
+                <Icon Name="clock" Size="14" />
+                <span>@L.Duration(Timing.Duration)</span>
+                @if (Timing.EndsAtMidnight)
+                {
+                    <span>· @L["до полуночи", "until midnight"]</span>
+                }
+                else if (Timing.EndsNextDay)
+                {
+                    <span>· @L[$"закончится на следующий день, {L.DayHeading(Timing.EndDate).ToLower(L.Culture)}", $"ends the next day, {L.DayHeading(Timing.EndDate)}"]</span>
+                }
+            </p>
             <label class="field"><span>@L["Заметки", "Notes"]</span><textarea @bind="_notes" rows="2" maxlength="2000"></textarea></label>
             @if (Block is null && TaskId is null)
             {
@@ -42,6 +54,8 @@
     private ApiException? _error;
     private bool _busy;
     private bool _wasOpen;
+
+    private BlockTiming Timing => BlockTiming.Of(_date, _start, _end);
 
     [Parameter] public bool Open { get; set; }
     [Parameter] public EventCallback<bool> OpenChanged { get; set; }
@@ -88,8 +102,8 @@
         try
         {
             var startsAt = L.ToInstant(_date, _start);
-            // An end time earlier than the start means the block ends after midnight.
-            var endsAt = L.ToInstant(_end <= _start ? _date.AddDays(1) : _date, _end);
+            // An end time not later than the start means the block ends after midnight (shown above the form).
+            var endsAt = L.ToInstant(Timing.EndDate, _end);
             TimeBlockSaveResult result = Block is null
                 ? await Api.PostAsync<TimeBlockSaveResult>("/api/v1/planner/blocks",
                     new CreateTimeBlockRequest(_title, _notes, startsAt, endsAt, TaskId, _createTask ? _title : null))

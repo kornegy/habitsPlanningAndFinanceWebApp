@@ -99,6 +99,19 @@ public sealed class Loc
         return $"{count.ToString(Culture)} {word}";
     }
 
+    /// <summary>"2 ч 30 мин" / "2 h 30 min"; whole hours and minutes only.</summary>
+    public string Duration(TimeSpan duration)
+    {
+        var (hours, minutes) = ((int)duration.TotalHours, duration.Minutes);
+        var (h, m) = IsEnglish ? ("h", "min") : ("ч", "мин");
+        return (hours, minutes) switch
+        {
+            (0, _) => $"{minutes} {m}",
+            (_, 0) => $"{hours} {h}",
+            _ => $"{hours} {h} {minutes} {m}",
+        };
+    }
+
     public string Percent(decimal value) => $"{value.ToString("0.#", Culture)}%";
 
     /// <summary>Converts a local date and time in the user's zone to an absolute instant (DST gaps move forward).</summary>

@@ -283,6 +283,12 @@ input:autofill { background-color: var(--surface); color: var(--ink); }
 .popover { position: absolute; right: 0; top: calc(100% + var(--space-2)); width: 320px; max-height: 60vh; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); z-index: 30; box-shadow: var(--shadow); }
 .popover-menu { width: 200px; padding: var(--space-1); }
 /* Colour picker: the panel sits in the document flow (so dialogs never clip it) above the dismiss layer. */
+/* 24-hour time entry: two compact selects that read as one field. */
+.time-field { display: flex; align-items: center; gap: var(--space-1); }
+.time-field select { flex: 1 1 0; min-width: 0; max-width: 6em; padding-left: var(--space-2); padding-right: var(--space-5); font-variant-numeric: tabular-nums; }
+.time-field-separator { font-weight: 600; color: var(--muted-ink); }
+.block-timing { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-sm); color: var(--muted-ink); flex-wrap: wrap; }
+.block-timing.next-day { color: var(--warning); }
 .color-picker { justify-self: start; }
 .color-toggle { gap: var(--space-2); min-width: 0; justify-content: flex-start; }
 .color-panel { position: relative; z-index: 30; margin-top: var(--space-2); padding: var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); display: grid; gap: var(--space-3); width: max-content; max-width: 100%; }

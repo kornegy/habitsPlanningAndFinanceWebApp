@@ -141,3 +141,33 @@ public sealed class LocTests
     private static ProfileDto Profile(string locale, DateFormatPreference format, DayOfWeek firstDay, string zone) =>
         new("user@example.test", "Test", zone, locale, "RUB", format, firstDay, false, ThemePreference.System, new DateOnly(2026, 3, 11), 1);
 }
+
+public sealed class BlockTimingTests
+{
+    private static readonly DateOnly Friday = new(2026, 10, 23);
+
+    [Theory]
+    [InlineData("09:00", "11:30", 0, 150, false, false)]
+    [InlineData("22:00", "00:00", 1, 120, true, false)] // until midnight: the block stays on its own day
+    [InlineData("22:00", "02:00", 1, 240, false, true)]
+    [InlineData("22:00", "12:00", 1, 840, false, true)] // the reported case: noon is the next day, 14 hours later
+    [InlineData("08:00", "08:00", 1, 1440, false, true)]
+    public void End_time_not_after_the_start_ends_after_midnight(string start, string end, int endDayOffset, int minutes, bool midnight, bool nextDay)
+    {
+        var timing = BlockTiming.Of(Friday, TimeOnly.Parse(start, CultureInfo.InvariantCulture), TimeOnly.Parse(end, CultureInfo.InvariantCulture));
+
+        Assert.Equal(new BlockTiming(Friday.AddDays(endDayOffset), TimeSpan.FromMinutes(minutes), midnight, nextDay), timing);
+    }
+
+    [Fact]
+    public void Durations_are_written_in_hours_and_minutes()
+    {
+        var loc = new Loc();
+        loc.SetLanguage(english: false);
+        Assert.Equal("2 ч", loc.Duration(TimeSpan.FromHours(2)));
+        Assert.Equal("45 мин", loc.Duration(TimeSpan.FromMinutes(45)));
+        Assert.Equal("14 ч 30 мин", loc.Duration(TimeSpan.FromMinutes(870)));
+        loc.SetLanguage(english: true);
+        Assert.Equal("1 h 5 min", loc.Duration(TimeSpan.FromMinutes(65)));
+    }
+}

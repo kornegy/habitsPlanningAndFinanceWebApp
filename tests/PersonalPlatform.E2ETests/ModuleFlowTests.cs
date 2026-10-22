@@ -172,6 +172,36 @@ public sealed class ModuleFlowTests(BrowserEnvironment env)
     }
 
     [Fact]
+    public async Task Evening_block_shows_where_it_ends_and_can_run_until_midnight()
+    {
+        await using var session = await BrowserSession.StartAsync(env, nameof(Evening_block_shows_where_it_ends_and_can_run_until_midnight));
+        await session.SignInAsNewUserAsync();
+        var page = session.Page;
+
+        await page.GotoAsync(session.Url("planner"));
+        await page.Locator(".planner-slot").Nth(88).ClickAsync(); // 22:00 in the day view
+        var form = page.Locator("#block-form");
+        await form.Locator("input").First.FillAsync("Кино");
+        var endHours = page.GetByLabel("Окончание: часы");
+        var timing = form.Locator(".block-timing");
+
+        // Noon is twelve hours on the 24-hour clock, so 22:00–12:00 visibly ends the next day.
+        await endHours.SelectOptionAsync("12");
+        await Assertions.Expect(timing).ToContainTextAsync("14 ч");
+        await Assertions.Expect(timing).ToContainTextAsync("закончится на следующий день");
+
+        await endHours.SelectOptionAsync("00");
+        await Assertions.Expect(timing).ToContainTextAsync("2 ч");
+        await Assertions.Expect(timing).ToContainTextAsync("до полуночи");
+        await session.SubmitModalAsync();
+
+        var block = page.Locator(".planner-block", new() { HasText = "Кино" });
+        await Assertions.Expect(block).ToHaveCountAsync(1);
+        await Assertions.Expect(block).ToContainTextAsync("22:00–00:00");
+        session.AssertHealthy();
+    }
+
+    [Fact]
     public async Task Note_autosaves_only_after_server_confirmation_and_is_searchable()
     {
         await using var session = await BrowserSession.StartAsync(env, nameof(Note_autosaves_only_after_server_confirmation_and_is_searchable));
