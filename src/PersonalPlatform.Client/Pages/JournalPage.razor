@@ -16,14 +16,14 @@
 </div>
 
 <div class="notes-layout">
-    <aside aria-label="@L["Записи", "Entries"]" class="stack">
+    <aside aria-label="@L["Записи", "Entries"]" class="pane pane-list">
         <input type="search" placeholder="@L["Поиск по дневнику", "Search journal"]" maxlength="100" aria-label="@L["Поиск", "Search"]"
                @bind="_search" @bind:event="oninput" @bind:after="SearchAsync" />
         @if (_list is not null)
         {
             @if (_list.Items.Count == 0)
             {
-                <p class="muted">@L["Записей пока нет.", "No entries yet."]</p>
+                <EmptyState IconName="book" Compact="true" Title="@(_search.Length > 0 ? L["Ничего не найдено", "Nothing found"] : L["Записей пока нет", "No entries yet"])" />
             }
             @foreach (var entry in _list.Items)
             {
@@ -36,7 +36,7 @@
         }
     </aside>
 
-    <section class="stack" aria-label="@L["Запись", "Entry"]">
+    <section class="pane pane-main" aria-label="@L["Запись", "Entry"]">
         <div class="row-between">
             <h2>@L.DayHeading(_date)</h2>
             <span class="status-pill @(_error ? "error" : _saved ? "ok" : null)" role="status" aria-live="polite">@StatusText</span>
@@ -48,14 +48,17 @@
                 <button type="button" class="button button-small" @onclick="ReloadEntryAsync">@L["Загрузить актуальную", "Load the latest"]</button>
             </div>
         }
-        <fieldset class="row" aria-label="@L["Настроение", "Mood"]">
-            <legend class="small muted">@L["Настроение", "Mood"]</legend>
+        <fieldset class="mood-picker">
+            <legend>@L["Настроение", "Mood"]</legend>
             @for (var i = 1; i <= 5; i++)
             {
                 var mood = i;
-                <label class="checkbox"><input type="radio" name="mood" checked="@(_mood == mood)" @onchange="() => SetMood(mood)" /> @mood</label>
+                <label class="mood-option"><input type="radio" name="mood" class="visually-hidden" checked="@(_mood == mood)" @onchange="() => SetMood(mood)" /><span>@mood</span></label>
             }
-            <button type="button" class="link-button small" @onclick="() => SetMood(null)">@L["Сбросить", "Clear"]</button>
+            @if (_mood is not null)
+            {
+                <button type="button" class="link-button small" @onclick="() => SetMood(null)">@L["Сбросить", "Clear"]</button>
+            }
         </fieldset>
         <textarea class="note-body" @bind="_content" @bind:event="oninput" @bind:after="Edited" maxlength="50000"
                   placeholder="@L["Как прошёл день?", "How was your day?"]" aria-label="@L["Текст записи", "Entry text"]"></textarea>

@@ -182,7 +182,7 @@ input:autofill { background-color: var(--surface); color: var(--ink); }
 .field { display: grid; gap: var(--space-1); }
 .field > span { font-size: var(--text-sm); font-weight: 500; }
 .checkbox { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
-.stack { display: grid; gap: var(--space-4); }
+.stack { display: grid; gap: var(--space-4); align-content: start; }
 .row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
 .row-between { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
@@ -256,7 +256,15 @@ input:autofill { background-color: var(--surface); color: var(--ink); }
 /* A thin ring keeps dark user colours visible on the dark scheme (and light ones on the light scheme). */
 .color-dot circle { stroke: var(--line-strong); stroke-width: 1; }
 .empty { text-align: center; padding: var(--space-7) var(--space-4); color: var(--muted-ink); display: grid; justify-items: center; gap: var(--space-2); }
+.empty p { margin: 0; max-width: 46ch; }
 .empty-title { color: var(--ink); font-weight: 500; margin: 0; }
+.empty-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--hover); color: var(--muted-ink); margin-bottom: var(--space-1); }
+.empty > .button, .empty > .row { margin-top: var(--space-3); }
+/* Compact: a single muted line for widgets and side lists, aligned with the surrounding content. */
+.empty-compact { display: flex; align-items: center; gap: var(--space-3); text-align: left; padding: var(--space-3) 0; }
+.empty-compact .empty-icon { width: 32px; height: 32px; margin: 0; flex: none; }
+.empty-compact .empty-title { color: var(--muted-ink); font-weight: 400; max-width: none; }
+.subsection-title { margin-top: var(--space-6); }
 .skeleton { display: grid; gap: var(--space-3); }
 .skeleton-line { height: 16px; border-radius: 4px; background: linear-gradient(90deg, var(--line), var(--hover), var(--line)); background-size: 200% 100%; animation: shimmer 1.4s ease infinite; }
 .skeleton-line:nth-child(2n) { width: 70%; }
@@ -369,10 +377,29 @@ input:autofill { background-color: var(--surface); color: var(--ink); }
 .planner-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: var(--space-5); }
 
 /* ---------- Notes ---------- */
-.notes-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--space-5); }
-.note-list-item { display: block; padding: var(--space-3); border-radius: var(--radius); text-decoration: none; color: inherit; border: 1px solid transparent; }
+.notes-layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+/* Two-pane workspace (notes, journal): a list panel and a main panel of equal visual weight. */
+.pane { background: var(--surface); border: 1px solid var(--line); border-radius: calc(var(--radius) + 4px); min-width: 0; }
+.pane-list { padding: var(--space-3); display: grid; gap: var(--space-3); align-content: start; position: sticky; top: calc(88px * var(--scale)); max-height: calc(100vh - 120px * var(--scale)); overflow-y: auto; }
+.pane-filters { display: grid; gap: var(--space-2); }
+.filters-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--space-2); }
+.filters-2 select { padding-left: var(--space-2); padding-right: var(--space-5); }
+.pane-list input, .pane-list select { background: var(--bg); }
+.pane-main { padding: var(--space-5) var(--space-6); display: grid; gap: var(--space-4); align-content: start; min-height: calc(100vh - 210px * var(--scale)); }
+.pane-placeholder { display: grid; place-items: center; min-height: calc(100vh - 260px * var(--scale)); }
+/* The writing area is one centred column of a comfortable line length, whatever the screen width. */
+.pane-main > :not(.pane-placeholder) { width: 100%; max-width: 960px; justify-self: center; }
+.note-list { display: grid; gap: var(--space-1); }
+.note-list-item { display: block; width: 100%; text-align: left; padding: var(--space-3); border-radius: var(--radius); text-decoration: none; color: inherit; border: 1px solid transparent; }
 .note-list-item:hover { background: var(--hover); }
-.note-list-item.active { background: var(--surface); border-color: var(--line); }
+.note-list-item.active { background: var(--hover); border-color: var(--line-strong); }
+/* Mood: five chips instead of bare radio buttons; the radios stay in the DOM for keyboard and screen readers. */
+.mood-picker { border: none; padding: 0; margin: 0; display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.mood-picker legend { float: left; margin-right: var(--space-2); font-size: var(--text-sm); color: var(--muted-ink); padding: 0; }
+.mood-option { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line-strong); border-radius: 50%; cursor: pointer; font-variant-numeric: tabular-nums; }
+.mood-option:hover { background: var(--hover); }
+.mood-option:has(input:checked) { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.mood-option:has(input:focus-visible) { box-shadow: var(--focus); }
 .note-snippet { font-size: var(--text-sm); color: var(--muted-ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: pre-line; }
 .note-title-input { font-size: var(--text-2xl); font-weight: 600; border: none; background: transparent; padding: 0; min-height: 44px; }
 .note-title-input:focus { box-shadow: none; }
@@ -394,6 +421,9 @@ input:autofill { background-color: var(--surface); color: var(--ink); }
   .page { padding: var(--space-4); }
   .hide-mobile { display: none; }
   .grid-2, .grid-3, .notes-layout { grid-template-columns: minmax(0, 1fr); }
+  .pane-list { position: static; max-height: none; }
+  .pane-main { padding: var(--space-4); min-height: 0; }
+  .no-selection > .pane-main { display: none; }
   .mobile-nav { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; inset: auto 0 0 0; height: 64px; background: var(--bg); border-top: 1px solid var(--line); z-index: 40; }
   .mobile-item { display: grid; justify-items: center; align-content: center; gap: 2px; font-size: var(--text-2xs); color: var(--muted-ink); text-decoration: none; border: none; background: none; font-family: inherit; cursor: pointer; }
   .mobile-item.active { color: var(--ink); font-weight: 500; }
@@ -421,7 +451,6 @@ input:autofill { background-color: var(--surface); color: var(--ink); }
 
 /* ---------- Large screens ---------- */
 .page form.stack { max-width: 1040px; }
-.note-title-input, .note-body { max-width: 1040px; }
 @media (min-width: 1600px) {
   :root { --scale: 1.07; }
   .dashboard-grid { gap: var(--space-7); }

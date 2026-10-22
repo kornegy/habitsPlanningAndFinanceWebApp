@@ -17,12 +17,12 @@
     </div>
 </div>
 
-<div class="notes-layout">
-    <aside aria-label="@L["Список заметок", "Note list"]">
-        <div class="stack">
+<div class="notes-layout @(Id is null ? "no-selection" : null)">
+    <aside class="pane pane-list" aria-label="@L["Список заметок", "Note list"]">
+        <div class="pane-filters">
             <input type="search" placeholder="@L["Поиск по тексту", "Search text"]" aria-label="@L["Поиск заметок", "Search notes"]" maxlength="100"
                    @bind="_search" @bind:event="oninput" @bind:after="SearchChangedAsync" />
-            <div class="row">
+            <div class="filters-2">
                 <select @bind="_tagId" @bind:after="ReloadAsync" aria-label="@L["Тег", "Tag"]">
                     <option value="">@L["Все теги", "All tags"]</option>
                     @foreach (var tag in _tags)
@@ -44,11 +44,11 @@
         }
         else if (_page.Items.Count == 0)
         {
-            <EmptyState IconName="note" Title="@L["Заметок нет", "No notes"]" />
+            <EmptyState IconName="note" Compact="true" Title="@(_search.Length > 0 || _tagId.Length > 0 ? L["Ничего не найдено", "Nothing found"] : L["Заметок пока нет", "No notes yet"])" />
         }
         else
         {
-            <nav class="stack">
+            <nav class="note-list">
                 @foreach (var note in _page.Items)
                 {
                     <a class="note-list-item @(note.Id == Id ? "active" : null)" href="notes/@note.Id" @key="note.Id">
@@ -68,14 +68,19 @@
         }
     </aside>
 
-    <section aria-label="@L["Редактор", "Editor"]">
+    <section class="pane pane-main" aria-label="@L["Редактор", "Editor"]">
         @if (Id is { } id)
         {
-            <NoteEditor @key="id" NoteId="id" Tags="_tags" OnChanged="LoadAsync" OnDeleted="DeletedAsync" OnTagCreated="TagCreated" />
+            <div><NoteEditor @key="id" NoteId="id" Tags="_tags" OnChanged="LoadAsync" OnDeleted="DeletedAsync" OnTagCreated="TagCreated" /></div>
         }
         else
         {
-            <EmptyState IconName="note" Title="@L["Выберите заметку", "Select a note"]" Text="@L["или создайте новую.", "or create a new one."]" />
+            <div class="pane-placeholder">
+                <EmptyState IconName="note" Title="@L["Выберите заметку слева", "Pick a note on the left"]"
+                            Text="@L["или начните новую — она сохраняется автоматически.", "or start a new one — it saves automatically."]">
+                    <button type="button" class="button button-primary" @onclick="CreateAsync"><Icon Name="plus" />@L["Новая заметка", "New note"]</button>
+                </EmptyState>
+            </div>
         }
     </section>
 </div>

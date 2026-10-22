@@ -46,7 +46,7 @@ else
                 <div class="section-title"><h2 id="today-tasks">@L["Задачи на сегодня", "Today's tasks"]</h2><a href="tasks?view=Today">@L["Все", "All"]</a></div>
                 @if (_data.TasksToday.Count == 0)
                 {
-                    <EmptyState IconName="tasks" Title="@L["На сегодня задач нет", "Nothing due today"]" />
+                    <EmptyState IconName="tasks" Compact="true" Title="@L["На сегодня задач нет", "Nothing due today"]" />
                 }
                 else
                 {
@@ -82,7 +82,7 @@ else
                 <div class="section-title"><h2 id="today-habits">@L["Привычки", "Habits"]</h2><a href="habits">@L["Все", "All"]</a></div>
                 @if (_data.Habits.Count == 0)
                 {
-                    <EmptyState IconName="habits" Title="@L["Сегодня привычек по плану нет", "No habits scheduled today"]" />
+                    <EmptyState IconName="habits" Compact="true" Title="@L["Сегодня привычек по плану нет", "No habits scheduled today"]" />
                 }
                 else
                 {
@@ -109,7 +109,7 @@ else
                 <div class="section-title"><h2 id="upcoming">@L["Ближайшие блоки", "Coming up"]</h2><a href="planner">@L["План", "Plan"]</a></div>
                 @if (_data.UpcomingBlocks.Count == 0)
                 {
-                    <p class="muted">@L["Сегодня больше ничего не запланировано.", "Nothing else planned today."]</p>
+                    <EmptyState IconName="calendar" Compact="true" Title="@L["Сегодня больше ничего не запланировано", "Nothing else planned today"]" />
                 }
                 <ul class="list">
                     @foreach (var block in _data.UpcomingBlocks)
@@ -126,7 +126,7 @@ else
                 <div class="section-title"><h2 id="month-money">@L["Финансы за месяц", "This month"]</h2><a href="finance">@L["Подробнее", "Details"]</a></div>
                 @if (_data.MonthCashFlow.Count == 0)
                 {
-                    <p class="muted">@L["Операций в этом месяце нет.", "No operations this month."]</p>
+                    <EmptyState IconName="wallet" Compact="true" Title="@L["Операций в этом месяце нет", "No operations this month"]" />
                 }
                 @foreach (var flow in _data.MonthCashFlow)
                 {

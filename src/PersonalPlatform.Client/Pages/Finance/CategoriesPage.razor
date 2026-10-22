@@ -27,6 +27,10 @@
 {
     <section class="section">
         <h2>@(kind == CategoryKind.Expense ? L["Расходы", "Expenses"] : L["Доходы", "Income"])</h2>
+        @if (!_categories.Any(c => c.Kind == kind))
+        {
+            <EmptyState IconName="wallet" Compact="true" Title="@(kind == CategoryKind.Expense ? L["Категорий расходов пока нет — добавьте первую формой выше.", "No expense categories yet — add one with the form above."] : L["Категорий доходов пока нет — добавьте первую формой выше.", "No income categories yet — add one with the form above."])" />
+        }
         <ul class="list">
             @foreach (var parent in _categories.Where(c => c.Kind == kind && c.ParentId is null))
             {

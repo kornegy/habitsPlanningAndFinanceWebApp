@@ -98,6 +98,30 @@ public sealed class InterfaceTests(BrowserEnvironment env)
     }
 
     [Fact]
+    public async Task Empty_note_editor_is_centred_and_journal_search_keeps_its_height()
+    {
+        await using var session = await BrowserSession.StartAsync(env, nameof(Empty_note_editor_is_centred_and_journal_search_keeps_its_height), new ViewportSize { Width = 1920, Height = 1080 });
+        await session.SignInAsNewUserAsync();
+        var page = session.Page;
+
+        await page.GotoAsync(session.Url("notes"));
+        var placeholder = page.Locator(".pane-main .empty");
+        await Assertions.Expect(placeholder.GetByRole(AriaRole.Button, new() { Name = "Новая заметка" })).ToBeVisibleAsync();
+        var pane = (await page.Locator(".pane-main").BoundingBoxAsync())!;
+        var empty = (await placeholder.BoundingBoxAsync())!;
+        Assert.InRange(empty.X + (empty.Width / 2) - (pane.X + (pane.Width / 2)), -2, 2);
+        Assert.InRange(empty.Y + (empty.Height / 2) - (pane.Y + (pane.Height / 2)), -40, 40);
+        session.AssertHealthy();
+
+        // A day without an entry is answered with 404 (shown as an empty entry), which the browser logs as a failed
+        // request, so the console is not checked after this point.
+        await page.GotoAsync(session.Url("journal"));
+        var search = page.Locator(".pane-list input[type=search]");
+        await Assertions.Expect(search).ToBeVisibleAsync();
+        Assert.True((await search.BoundingBoxAsync())!.Height < 60);
+    }
+
+    [Fact]
     public async Task Pages_use_the_full_width_of_large_monitors()
     {
         await using var session = await BrowserSession.StartAsync(env, nameof(Pages_use_the_full_width_of_large_monitors), new ViewportSize { Width = 2560, Height = 1440 });

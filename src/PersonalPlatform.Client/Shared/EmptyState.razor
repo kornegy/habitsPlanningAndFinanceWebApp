@@ -1,5 +1,5 @@
-<div class="empty">
-    <Icon Name="@IconName" Size="28" />
+<div class="empty @(Compact ? "empty-compact" : null)">
+    <span class="empty-icon" aria-hidden="true"><Icon Name="@IconName" Size="@(Compact ? 18 : 24)" /></span>
     <p class="empty-title">@Title</p>
     @if (Text is not null)
     {
@@ -13,4 +13,7 @@
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter] public string? Text { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Small inline variant for dashboard widgets and side panels.</summary>
+    [Parameter] public bool Compact { get; set; }
 }
